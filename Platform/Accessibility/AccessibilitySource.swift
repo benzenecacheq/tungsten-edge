@@ -950,6 +950,12 @@ struct PlatformActionExecutor {
             return executeAppFallback(request: request, record: record)
         }
 
+        // X11 windows have no AX handle; XQuartz's Window menu raises / minimizes / closes them.
+        if XQuartzWindowRules.isXQuartz(bundleIdentifier: record.bundleIdentifier),
+           [.activateWindow, .minimizeWindow, .closeWindow].contains(request.kind) {
+            return XQuartzWindowActions.perform(request.kind, record: record)
+        }
+
         // New window needs no window handle — just activate the app and send Cmd+N.
         if request.kind == .newWindow {
             return performNewWindow(record: record)

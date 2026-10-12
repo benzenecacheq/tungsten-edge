@@ -108,6 +108,11 @@ final class AppTracker: ObservableObject {
     private var workspaceObservers: [NSObjectProtocol] = []
     private var reconcileTimer: Timer?
     private var frontmostPollTimer: Timer?
+    /// XQuartz 的 X 窗口不在 AX 里（`XQuartzWindowInventory`）：独立 1s 轮询 CG + 它的 Window 菜单，
+    /// 读数并进快照，一扇 X 窗口一张卡。
+    private var xquartzPollTimer: Timer?
+    private var xquartzReading: XQuartzWindowReader.Reading?
+    private var xquartzReadInFlight = false
     private var isScanningCandidates = false
     /// Per-pid retry task asking whether a freshly seatless process is still `.regular`
     /// (`scheduleNonRegularEviction`). Ice flips back to `.accessory` right after its settings
@@ -286,6 +291,7 @@ final class AppTracker: ObservableObject {
         seedRunningApps()
         startReconcileTimer()
         startFrontmostPollTimer()
+        startXQuartzPollTimer()
         // seed 后补扫四轮：挂死 app 在 seed 限时读里会被跳过，补扫用 inventoryWindows 限时读逐步收入。
         for delay in [0.5, 1.0, 2.0, 4.0] {
             Task { @MainActor [weak self] in
@@ -300,6 +306,8 @@ final class AppTracker: ObservableObject {
         reconcileTimer = nil
         frontmostPollTimer?.invalidate()
         frontmostPollTimer = nil
+        xquartzPollTimer?.invalidate()
+        xquartzPollTimer = nil
         if let screenParametersObserver {
             NotificationCenter.default.removeObserver(screenParametersObserver)
             self.screenParametersObserver = nil
@@ -1950,6 +1958,43 @@ final class AppTracker: ObservableObject {
         frontmostPollTimer?.tolerance = 0.05
     }
 
+    private func startXQuartzPollTimer() {
+        xquartzPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.pollXQuartzWindows() }
+        }
+        xquartzPollTimer?.tolerance = 0.1
+    }
+
+    /// The Window menu read is AX into XQuartz, so it runs off the main actor; one read in flight.
+    private func pollXQuartzWindows() {
+        guard AXIsProcessTrusted(), !xquartzReadInFlight else { return }
+        guard let pid = XQuartzWindowReader.runningPID() else {
+            if xquartzReading != nil {
+                xquartzReading = nil
+                rebuildSnapshot()
+            }
+            return
+        }
+        xquartzReadInFlight = true
+        DispatchQueue.global(qos: .utility).async {
+            let reading = XQuartzWindowReader.read(pid: pid)
+            Task { @MainActor [weak self] in self?.landXQuartzReading(reading, pid: pid) }
+        }
+    }
+
+    private func landXQuartzReading(_ reading: XQuartzWindowReader.Reading?, pid: pid_t) {
+        xquartzReadInFlight = false
+        if let reading {
+            xquartzReading = reading
+        } else if xquartzReading?.pid != pid {
+            // Unreadable menu: keep the last reading of this same process, never a stale pid's.
+            xquartzReading = nil
+        }
+        // Rebuild every landing, not only on a changed reading: the front window's status also
+        // follows the frontmost app, and an unchanged snapshot is not republished.
+        rebuildSnapshot()
+    }
+
     private func currentFrontmostPID() -> pid_t? {
         guard frontmostCacheEnabled else {
             return NSWorkspace.shared.frontmostApplication?.processIdentifier
@@ -2440,10 +2485,14 @@ final class AppTracker: ObservableObject {
             apps[pid]?.lastWindowDisplayUUID = home
         }
 
+        let xquartz = xquartzReading.flatMap { $0.windows.isEmpty ? nil : $0 }
+
         for pid in appOrder {
             guard let app = apps[pid] else { continue }
 
             if app.windowOrder.isEmpty {
+                // XQuartz with X windows: those windows are its cards (below), not the app card.
+                if pid == xquartz?.pid { continue }
                 guard let fallback = fallbackByPID[pid] else { continue }
                 let id = WindowID(rawValue: fallback.windowID)
                 windows[id] = WindowRecord(
@@ -2481,6 +2530,33 @@ final class AppTracker: ObservableObject {
                     )
                     orderedWindowIDs.append(id)
                 }
+            }
+        }
+
+        if let xquartz {
+            let bundleID = XQuartzWindowRules.bundleIdentifier
+            for window in xquartz.windows {
+                let id = WindowID(rawValue: "cgw-\(window.cgWindowID)")
+                windows[id] = WindowRecord(
+                    id: id,
+                    appID: AppID(rawValue: bundleID),
+                    pid: xquartz.pid,
+                    bundleIdentifier: bundleID,
+                    title: window.title,
+                    bounds: window.bounds,
+                    status: windowStatus(
+                        isHidden: xquartz.isHidden,
+                        isMinimized: window.isMinimized,
+                        isFocused: window.isFront,
+                        pid: xquartz.pid,
+                        frontmostPID: frontmostPID
+                    ),
+                    cgWindowID: window.cgWindowID,
+                    isOnDesktop: !window.isMinimized && !xquartz.isHidden,
+                    groupID: id.rawValue,
+                    displayUUID: WindowDisplayAttribution.displayUUID(for: window.bounds, table: displayTable)
+                )
+                orderedWindowIDs.append(id)
             }
         }
 
