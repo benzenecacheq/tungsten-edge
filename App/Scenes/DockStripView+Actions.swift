@@ -8,13 +8,18 @@ import UniformTypeIdentifiers
 extension DockStripView {
     /// Kept launcher uses the same shared membership projection (strip surface).
     func keptAppMembershipItems(bundleID: String) -> [LauncherMembershipItem] {
-        LauncherMembershipItem.items(
+        let isMessaging = messagingStore.contains(bundleID)
+        // The Apps entry heading a side-edge bar can have a divider after it, like a pinned tile.
+        let headsBar = taskbarEdge.isVertical && !isMessaging
+            && bundleID == KeptAppStore.systemAppLauncherBundleID
+        return LauncherMembershipItem.items(
             surface: .strip,
             bundleID: bundleID,
             isKept: keptAppStore.contains(bundleID),
-            isMessaging: messagingStore.contains(bundleID),
+            isMessaging: isMessaging,
             controller: appMembershipController
-        )
+        ) + (headsBar ? [LauncherMembershipItem.dividerAfterItem(bundleID: bundleID,
+                                                                 controller: appMembershipController)] : [])
     }
 
     /// 固定文件夹左键唯一入口：按 `FolderInteraction.primaryAction` 分派（现固定 = 内容预览）。

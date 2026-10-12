@@ -52,9 +52,15 @@ extension LauncherMembershipItem {
         controller: AppMembershipController
     ) -> [LauncherMembershipItem] {
         guard surface == .strip, isMessaging else { return [] }
+        return [dividerAfterItem(bundleID: bundleID, controller: controller)]
+    }
+
+    /// The Divider After toggle, also offered on the Apps entry heading a side-edge bar.
+    @MainActor
+    static func dividerAfterItem(bundleID: String, controller: AppMembershipController) -> LauncherMembershipItem {
         let isChecked = controller.hasPinnedDivider(after: bundleID)
-        return [LauncherMembershipItem(label: String(localized: "Divider After"), isChecked: isChecked) {
+        return LauncherMembershipItem(label: String(localized: "Divider After"), isChecked: isChecked) {
             controller.setPinnedDivider(after: bundleID, enabled: !isChecked)
-        }]
+        }
     }
 }

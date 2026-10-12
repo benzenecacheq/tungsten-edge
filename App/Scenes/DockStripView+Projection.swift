@@ -282,7 +282,12 @@ extension DockStripView {
         // A divider the user put after a pinned tile; none after the zone's last cell, where the
         // zone's own divider already is (the Shelf, when shown, comes after every tile).
         let lastTileID = settingsStore.showShelf ? nil : headTiles.last?.id
-        let headEntries = headLaunchers + headTiles.flatMap { tile -> [StripEntry] in
+        // The Apps entry heading a side-edge bar takes one too, when anything follows it in the zone.
+        let launcherDivider: [StripEntry] = !headLaunchers.isEmpty
+            && (!headTiles.isEmpty || settingsStore.showShelf)
+            && messagingStore.hasDivider(after: appsLauncherID)
+            ? [.divider(id: StripEntry.pinnedDividerID(after: appsLauncherID))] : []
+        let headEntries = headLaunchers + launcherDivider + headTiles.flatMap { tile -> [StripEntry] in
             guard case let .messagingApp(bid, _) = tile else { return [tile] }
             let divider: [StripEntry] = tile.id != lastTileID && messagingStore.hasDivider(after: bid)
                 ? [.divider(id: StripEntry.pinnedDividerID(after: bid))] : []
