@@ -135,11 +135,13 @@ extension PanelCoordinator {
         let contentHost: ManualPanelHost
         if let hosting = windowTitleTooltipHosting, let existingHost = windowTitleTooltipHost {
             hosting.rootView = WindowTitleTooltipView(title: request.title, style: style,
-                                                    usesLiquidGlass: usesLiquidGlass)
+                                                    usesLiquidGlass: usesLiquidGlass,
+                                                    pointsDown: !taskbarEdge.isVertical)
             contentHost = existingHost
         } else {
             let hosting = NSHostingView(rootView: WindowTitleTooltipView(title: request.title, style: style,
-                                                          usesLiquidGlass: usesLiquidGlass))
+                                                          usesLiquidGlass: usesLiquidGlass,
+                                                          pointsDown: !taskbarEdge.isVertical))
             hosting.wantsLayer = true
             hosting.layer?.backgroundColor = NSColor.clear.cgColor
             contentHost = ManualPanelHost(contentView: hosting, in: panel)
@@ -165,7 +167,8 @@ extension PanelCoordinator {
             anchorVisibleRect: request.anchorVisibleRect,
             size: size,
             tipGap: style.tipGap,
-            on: Self.screenGeometry(screen)
+            on: Self.screenGeometry(screen),
+            edge: taskbarEdge
         )
         panel.setFrame(target, display: true)
 

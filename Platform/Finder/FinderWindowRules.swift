@@ -42,7 +42,7 @@ enum FinderWindowRules {
     /// before launch would never seat. Admit the pair `min=true + AXDialog` for Finder only;
     /// every Finder window measured is a standard window while visible, so this admits nothing
     /// that would not already carry a card while visible. Title and frame checks still apply.
-    private static func isMinimizedMainWindow(role: String?, subrole: String?, isMinimized: Bool) -> Bool {
+    static func isMinimizedMainWindow(role: String?, subrole: String?, isMinimized: Bool) -> Bool {
         isMinimized
             && role == (kAXWindowRole as String)
             && subrole == (kAXDialogSubrole as String)

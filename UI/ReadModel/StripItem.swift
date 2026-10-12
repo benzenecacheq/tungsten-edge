@@ -31,6 +31,44 @@ enum WindowDisplayTitle {
         return remainder.isEmpty ? title : remainder
     }
 
+    /// A side-edge column's one-line card label: `App — title`. The title loses the app name when
+    /// it starts with it (any case) together with the separator after it, and when it ends with
+    /// it (`trimmingAppNameSuffix`). A title that is empty or nothing but the app name leaves the
+    /// app name alone.
+    static func columnLabel(appName: String, rawTitle: String?) -> String {
+        let app = appName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let title = columnTitle(appName: app, rawTitle: rawTitle) else { return app }
+        return app.isEmpty ? title : "\(app) — \(title)"
+    }
+
+    /// The hover bubble for a column card: the label's two halves, uncut, on lines of their own.
+    /// Just the app name when the title adds nothing.
+    static func columnBubble(appName: String, rawTitle: String?) -> String {
+        let app = appName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let title = columnTitle(appName: app, rawTitle: rawTitle) else { return app }
+        return app.isEmpty ? title : "\(app)\n\(title)"
+    }
+
+    /// The title part of `columnLabel`; nil when nothing is left once the app name is gone.
+    private static func columnTitle(appName app: String, rawTitle: String?) -> String? {
+        guard var title = rawTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else {
+            return nil
+        }
+        // Only a whole word: "Mailbox report" keeps its "Mail".
+        if !app.isEmpty, let prefix = title.range(of: app, options: [.anchored, .caseInsensitive]) {
+            let rest = title[prefix.upperBound...]
+            if rest.first.map({ $0.unicodeScalars.allSatisfy(columnLeadBoundary.contains) }) ?? true {
+                title = String(rest).trimmingCharacters(in: columnLeadBoundary)
+            }
+        }
+        if !app.isEmpty { title = trimmingAppNameSuffix(title, appName: app) }
+        return title.isEmpty || title.caseInsensitiveCompare(app) == .orderedSame ? nil : title
+    }
+
+    /// What may sit between a leading app name and the rest of the title (`Terminal — zsh`,
+    /// `Mail: Inbox`).
+    private static let columnLeadBoundary = CharacterSet.whitespaces.union(CharacterSet(charactersIn: "-—–|·:"))
+
     /// 尾部分隔符。长的排前面，免得 ` - ` 先命中把 `–` / `—` 的场景吃掉半个。
     private static let separators = [" - ", " — ", " – ", " | ", " · ", "-", "—", "–", "|"]
 }

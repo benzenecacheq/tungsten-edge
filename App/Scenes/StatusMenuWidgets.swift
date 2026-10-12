@@ -313,6 +313,82 @@ final class TaskbarSizeMenuItemView: NSView {
     }
 }
 
+/// A menu slider over a plain number (Background Opacity, Label Size), live while dragging.
+/// Laid out like `TaskbarSizeMenuItemView` so the tracks line up. `snap` turns the raw slider
+/// position into the stored value, `format` writes it on the knob and the end labels.
+@MainActor
+final class ValueSliderMenuItemView: NSView {
+    var onValueChange: ((Double) -> Void)?
+
+    private let lowLabel: NSTextField
+    private let highLabel: NSTextField
+    private let slider = MenuTrackingSlider()
+    private let snap: (Double) -> Double
+    private let format: (Double) -> String
+
+    init(accessibilityTitle: String, range: ClosedRange<Double>,
+         snap: @escaping (Double) -> Double, format: @escaping (Double) -> String) {
+        self.snap = snap
+        self.format = format
+        lowLabel = NSTextField(labelWithString: format(range.lowerBound))
+        highLabel = NSTextField(labelWithString: format(range.upperBound))
+        super.init(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
+        autoresizingMask = [.width]
+
+        for label in [lowLabel, highLabel] {
+            label.font = .systemFont(ofSize: 9)
+            label.textColor = PreferenceSliderMenuItemView.inactiveEndpointColor
+            label.alignment = .center
+            label.setAccessibilityElement(false)
+            addSubview(label)
+        }
+
+        slider.minValue = range.lowerBound
+        slider.maxValue = range.upperBound
+        slider.isContinuous = true
+        slider.target = self
+        slider.action = #selector(sliderChanged)
+        slider.setAccessibilityLabel(accessibilityTitle)
+        addSubview(slider)
+        sync(value: range.upperBound)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let width = window?.frame.width, width > frame.width {
+            frame.size.width = width
+        }
+    }
+
+    func sync(value: Double) {
+        slider.doubleValue = value
+        slider.displayString = format(value)
+    }
+
+    override func layout() {
+        super.layout()
+        let contentX = StatusMenuLayout.textInsetX
+        let contentWidth = bounds.width - contentX - StatusMenuLayout.trailingInsetX
+        let labelWidth = max(lowLabel.intrinsicContentSize.width, highLabel.intrinsicContentSize.width)
+        let sideInset = max(34, ceil(labelWidth) + 6)
+        let sliderY = (bounds.height - 20) / 2
+        slider.frame = NSRect(x: contentX + sideInset, y: sliderY, width: max(0, contentWidth - sideInset * 2), height: 20)
+        let labelY = (bounds.height - 12) / 2
+        lowLabel.frame = NSRect(x: contentX, y: labelY, width: sideInset, height: 12)
+        highLabel.frame = NSRect(x: slider.frame.maxX, y: labelY, width: sideInset, height: 12)
+    }
+
+    @objc private func sliderChanged(_ sender: NSSlider) {
+        let value = snap(sender.doubleValue)
+        slider.displayString = format(value)
+        onValueChange?(value)
+    }
+}
+
 /// 系统 Dock 滑块的确认按钮行。做成**按钮**而不是普通菜单文字行是有意的：
 /// 菜单行和它的邻居视觉权重相同，用户刚拖完滑块、视线还在滑块上，很容易整行错过；
 /// 一旦错过就直接关菜单，结果是「以为设好了其实没生效」——比原本那一下闪更糟。

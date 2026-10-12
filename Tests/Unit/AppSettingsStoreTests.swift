@@ -110,6 +110,89 @@ final class AppSettingsStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testTaskbarEdgeDefaultsToBottomAndPersists() {
+        let defaults = makeDefaults()
+        XCTAssertEqual(AppSettingsStore(defaults: defaults).taskbarEdge, .bottom)
+
+        let store = AppSettingsStore(defaults: defaults)
+        store.setTaskbarEdge(.right)
+        XCTAssertEqual(store.taskbarEdge, .right)
+        XCTAssertEqual(AppSettingsStore(defaults: defaults).taskbarEdge, .right, "survives a restart")
+    }
+
+    func testBackgroundOpacityDefaultsToTheOriginalLookAndPersistsInFivePercentSteps() {
+        let defaults = makeDefaults()
+        XCTAssertEqual(AppSettingsStore(defaults: defaults).taskbarBackgroundOpacity, TaskbarBackgroundOpacity.designed)
+
+        let store = AppSettingsStore(defaults: defaults)
+        store.setTaskbarBackgroundOpacity(0.42)
+        XCTAssertEqual(store.taskbarBackgroundOpacity, 0.4, accuracy: 1e-9)
+        XCTAssertEqual(AppSettingsStore(defaults: defaults).taskbarBackgroundOpacity, 0.4, accuracy: 1e-9)
+
+        store.setTaskbarBackgroundOpacity(-3)
+        XCTAssertEqual(store.taskbarBackgroundOpacity, 0)
+        store.setTaskbarBackgroundOpacity(.nan)
+        XCTAssertEqual(store.taskbarBackgroundOpacity, TaskbarBackgroundOpacity.designed)
+    }
+
+    func testColumnLabelFontSizeDefaultsAndClampsToWholePoints() {
+        let defaults = makeDefaults()
+        XCTAssertEqual(AppSettingsStore(defaults: defaults).columnLabelFontSize, AppSettingsStore.defaultColumnLabelFontSize)
+
+        let store = AppSettingsStore(defaults: defaults)
+        store.setColumnLabelFontSize(17.4)
+        XCTAssertEqual(store.columnLabelFontSize, 17)
+        XCTAssertEqual(AppSettingsStore(defaults: defaults).columnLabelFontSize, 17, "survives a restart")
+        store.setColumnLabelFontSize(99)
+        XCTAssertEqual(store.columnLabelFontSize, AppSettingsStore.columnLabelFontSizeRange.upperBound)
+        store.setColumnLabelFontSize(1)
+        XCTAssertEqual(store.columnLabelFontSize, AppSettingsStore.columnLabelFontSizeRange.lowerBound)
+    }
+
+    func testColumnWidthAndVerticalPositionPersistAndClamp() {
+        let defaults = makeDefaults()
+        let store = AppSettingsStore(defaults: defaults)
+        XCTAssertEqual(store.columnWidthAdjustment, 0)
+        XCTAssertEqual(store.columnVerticalPosition, 0.5, "centred by default")
+
+        store.setColumnWidthAdjustment(80.6)
+        store.setColumnVerticalPosition(0.12)
+        let reloaded = AppSettingsStore(defaults: defaults)
+        XCTAssertEqual(reloaded.columnWidthAdjustment, 81)
+        XCTAssertEqual(reloaded.columnVerticalPosition, 0.1, accuracy: 1e-9, "5% steps")
+
+        store.setColumnWidthAdjustment(-10_000)
+        XCTAssertEqual(store.columnWidthAdjustment, AppSettingsStore.columnWidthAdjustmentRange.lowerBound)
+        store.setColumnVerticalPosition(.nan)
+        XCTAssertEqual(store.columnVerticalPosition, 0.5)
+        XCTAssertGreaterThanOrEqual(store.panelLayoutMetrics.columnLabelWidth, PanelLayoutMetrics.minimumColumnLabelWidth)
+    }
+
+    func testCorruptBackgroundOpacityReadsAsTheOriginalLook() {
+        let defaults = makeDefaults()
+        defaults.set("half", forKey: "com.tungsten.edge.taskbarBackgroundOpacity")
+        XCTAssertEqual(AppSettingsStore(defaults: defaults).taskbarBackgroundOpacity, TaskbarBackgroundOpacity.designed)
+    }
+
+    func testBackgroundOpacityRunsFromClearThroughTheOriginalGlassToSolid() {
+        let clear = TaskbarBackgroundOpacity.layers(for: 0)
+        XCTAssertEqual(clear.glass, 0); XCTAssertEqual(clear.plate, 0)
+        let original = TaskbarBackgroundOpacity.layers(for: TaskbarBackgroundOpacity.designed)
+        XCTAssertEqual(original.glass, 1); XCTAssertEqual(original.plate, 0)
+        let solid = TaskbarBackgroundOpacity.layers(for: 1)
+        XCTAssertEqual(solid.glass, 1); XCTAssertEqual(solid.plate, 1)
+        XCTAssertEqual(TaskbarBackgroundOpacity.layers(for: 0.15).glass, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(TaskbarBackgroundOpacity.layers(for: 0.65).plate, 0.5, accuracy: 1e-9)
+    }
+
+    func testUnknownTaskbarEdgeReadsAsBottomWithoutRewritingTheKey() {
+        let defaults = makeDefaults()
+        defaults.set("left", forKey: "com.tungsten.edge.taskbarEdge")
+        XCTAssertEqual(AppSettingsStore(defaults: defaults).taskbarEdge, .bottom)
+        XCTAssertEqual(defaults.string(forKey: "com.tungsten.edge.taskbarEdge"), "left",
+                       "a newer version's choice survives a rollback")
+    }
+
     func testShowShelfDefaultsToOnAndPersists() {
         let defaults = makeDefaults()
         XCTAssertTrue(AppSettingsStore(defaults: defaults).showShelf, "默认显示中转格，升级不改变现有观感")

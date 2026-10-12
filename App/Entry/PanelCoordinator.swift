@@ -27,7 +27,9 @@ final class PanelCoordinator: NSObject {
     /// Panel geometry follows the user's bar height, so these are **instance** properties that
     /// read the store; only `shadowPadding` stays static (fixed 20, referenced by the drawer
     /// and both popups).
-    var layoutMetrics: PanelLayoutMetrics { settingsStore.dockPanelHeight.metrics }
+    var layoutMetrics: PanelLayoutMetrics { settingsStore.panelLayoutMetrics }
+    /// The screen edge the bar hugs (settings → `TaskbarEdge`).
+    var taskbarEdge: TaskbarEdge { settingsStore.taskbarEdge }
     var panelHeight: CGFloat { layoutMetrics.panelHeight }
     var windowHeight: CGFloat { layoutMetrics.windowHeight }
     var capsuleWidth: CGFloat { layoutMetrics.capsuleWidth }
@@ -195,6 +197,11 @@ final class PanelCoordinator: NSObject {
     var showShelfSubscription: AnyCancellable?
     var showTrashSubscription: AnyCancellable?
     var dockPanelHeightSubscription: AnyCancellable?
+    var taskbarEdgeSubscription: AnyCancellable?
+    var taskbarBackgroundOpacitySubscription: AnyCancellable?
+    var columnLabelFontSizeSubscription: AnyCancellable?
+    /// A drag on a column's inner edge: the width adjustment and pointer x at mouse-down.
+    var columnWidthDrag: (startAdjustment: Double, startCoordinate: CGFloat)?
     /// Height-change transaction generation: swallows animated relayouts other paths queue
     /// while a height change is in flight (see `beginPanelHeightChange`).
     var panelHeightChangeGeneration: UInt64 = 0
@@ -490,7 +497,10 @@ final class PanelCoordinator: NSObject {
 
     /// 最大化避让只在钨极常驻且真正可见时取得上下文；一次性返回完整几何，避免切屏时撕裂读取。
     func windowLiftAvoidanceContext() -> WindowLiftAvoidanceContext? {
-        guard !settingsStore.edgeAutoHideEnabled,
+        // Lifting raises a window's bottom edge; a side-edge bar would need it to pull the window's
+        // side in instead, which the avoidance does not do yet. No context = nothing is lifted.
+        guard !taskbarEdge.isVertical,
+              !settingsStore.edgeAutoHideEnabled,
               visibilityState.isVisible,
               panelsAreVisible,
               let panel = dockPanel else {
@@ -564,10 +574,9 @@ final class PanelCoordinator: NSObject {
         // Use the center of the visible content area (inset by shadowPadding) so the 12pt shadow
         // bleed below screen.frame.minY doesn't cause first(where:intersects) to return the wrong
         // adjacent screen in multi-monitor setups (e.g. vertically stacked 3-screen layouts).
-        let visualCenter = CGPoint(
-            x: panel.frame.midX,
-            y: panel.frame.minY + Self.shadowPadding + panelHeight / 2
-        )
+        let visualCenter = taskbarEdge.isVertical
+            ? CGPoint(x: panel.frame.midX, y: panel.frame.midY)
+            : CGPoint(x: panel.frame.midX, y: panel.frame.minY + Self.shadowPadding + panelHeight / 2)
         return NSScreen.screens.first(where: { $0.frame.contains(visualCenter) })
             ?? NSScreen.screens.first(where: { $0.frame.intersects(panel.frame) })
             ?? NSScreen.main ?? NSScreen.screens[0]

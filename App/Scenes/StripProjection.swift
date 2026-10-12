@@ -66,6 +66,9 @@ struct StripProjection {
     let entries: [StripEntry]
     let layoutKeys: [StripLayoutKey]
     let messagingIDs: [String]
+    /// Window cards drawn in the pinned zone, right after their app's tile. They are still in
+    /// `liveOrderIDs`, but live-zone reordering leaves them alone.
+    let pinnedWindowIDs: Set<String>
     let draggingID: String?
     /// 每个 app 在常规区**最靠左**那张卡的 entry id——未读角标只画在这一张上
     /// （一个未读数不能变成三个红点）。消息区成员不在这里：它们的角标画在区里那枚图标上。

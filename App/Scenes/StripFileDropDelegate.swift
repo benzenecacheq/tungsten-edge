@@ -11,6 +11,9 @@ import UniformTypeIdentifiers
 /// `onCommit`（`handleExternalDrop`）从此不可能拿到应用——那是本文件存在的第二个理由，
 /// 也是「拖应用到文件夹格子上会把它从『应用程序』搬走」这个 bug 的两道闸之一。
 struct StripFileDropDelegate: DropDelegate {
+    /// The bar's edge: the drop location is mapped onto the bar's axis before routing, and the
+    /// frames below already arrive mapped (`DockStripView.barFrame`).
+    let edge: TaskbarEdge
     /// Geometry is **read when a drop callback runs, never copied at construction**: the strip's
     /// frames live in `StripFrameBox` and the body no longer rebuilds this delegate when they move,
     /// so a value captured here would route a later drop by stale geometry (wrong folder, false
@@ -57,7 +60,7 @@ struct StripFileDropDelegate: DropDelegate {
     }
 
     private func route(_ info: DropInfo, isApplicationDrag: Bool) -> StripDropRouting.Target {
-        StripDropRouting.route(location: info.location,
+        StripDropRouting.route(location: edge.stripCanonical(info.location),
                                isApplicationDrag: isApplicationDrag,
                                isTrashItemDrag: DragPasteboardInspector.containsOnlyTrashItems(),
                                shelfFrame: shelfFrame(),

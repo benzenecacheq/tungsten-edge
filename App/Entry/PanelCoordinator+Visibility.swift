@@ -54,7 +54,7 @@ extension PanelCoordinator {
         let dyFromBottom: CGFloat
         let inHotZone: Bool
         if let s = curScreen {
-            dyFromBottom = mouse.y - s.frame.minY
+            dyFromBottom = distanceFromTaskbarEdge(mouse, on: s)
             inHotZone = dyFromBottom <= Self.hoverHotZone
         } else {
             dyFromBottom = -1
@@ -363,7 +363,16 @@ extension PanelCoordinator {
     private func isMouseInBottomHotZone(on screen: NSScreen) -> Bool {
         let mouse = NSEvent.mouseLocation
         guard screen.frame.contains(mouse) else { return false }
-        return mouse.y - screen.frame.minY <= Self.hoverHotZone
+        return distanceFromTaskbarEdge(mouse, on: screen) <= Self.hoverHotZone
+    }
+
+    /// How far the pointer is from the screen edge the bar hugs — the wake / switch hot zone
+    /// is the strip within `hoverHotZone` of it.
+    private func distanceFromTaskbarEdge(_ mouse: CGPoint, on screen: NSScreen) -> CGFloat {
+        switch taskbarEdge {
+        case .bottom: return mouse.y - screen.frame.minY
+        case .right: return screen.frame.maxX - mouse.x
+        }
     }
 
     func isMouseOutsideInteractivePanels() -> Bool {

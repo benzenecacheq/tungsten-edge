@@ -151,6 +151,38 @@ extension PanelCoordinator {
                 if self.folderPopupWantsOpen, self.openPopupContent == .trash { self.closeFolderPopup() }
                 DispatchQueue.main.async { [weak self] in self?.relayout(animated: true) }
             }
+        // Moving the bar to another edge re-shapes every panel: run it as a height change does
+        // (retire popups, drawer, drag and tooltip, then one instant relayout), and let the hover
+        // monitors re-arm for the new edge. dropFirst — `setupDockPanel` read the stored edge.
+        taskbarEdgeSubscription = settingsStore.$taskbarEdge
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.cancelHoverSwitch()
+                self.lastCommittedFrames = []
+                self.beginPanelHeightChange()
+                self.onHoverMonitorsNeedReconcile?()
+                self.reconcilePanelVisibility()
+            }
+        // The column's width follows the label size and the dragged width, and its place the
+        // vertical position (`AppSettingsStore.panelLayoutMetrics`).
+        columnLabelFontSizeSubscription = Publishers.CombineLatest4(
+                settingsStore.$columnLabelFontSize, settingsStore.$columnWidthAdjustment,
+                settingsStore.$columnVerticalPosition, settingsStore.$columnGrowth)
+            .map { "\($0)|\($1)|\($2)|\($3.rawValue)" }
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self, self.taskbarEdge.isVertical else { return }
+                self.beginPanelHeightChange()
+            }
+        taskbarBackgroundOpacitySubscription = settingsStore.$taskbarBackgroundOpacity
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.applyTaskbarBackgroundOpacity() }
         dockPanelHeightSubscription = heightResizePresentation
             .nonInteractiveHeightChanges(from: settingsStore.$dockPanelHeight)
             .sink { [weak self] _ in
@@ -214,11 +246,32 @@ extension PanelCoordinator {
         }
     }
 
+    /// Drag on a column's inner edge. The column stays against the screen edge, so its inner
+    /// edge follows the pointer: leftward widens it.
+    func handleColumnWidthResize(_ event: StripResizeGripEvent) {
+        switch event {
+        case .hover:
+            return
+        case let .began(pointer):
+            guard columnWidthDrag == nil else { return }
+            columnWidthDrag = (settingsStore.columnWidthAdjustment, resizeDragCoordinate(pointer))
+            setAutoHideInhibitor(.interactiveResize, active: true)
+        case let .changed(pointer):
+            guard let drag = columnWidthDrag else { return }
+            settingsStore.setColumnWidthAdjustment(
+                drag.startAdjustment + Double(resizeDragCoordinate(pointer) - drag.startCoordinate))
+        case .ended:
+            guard columnWidthDrag != nil else { return }
+            columnWidthDrag = nil
+            setAutoHideInhibitor(.interactiveResize, active: false)
+        }
+    }
+
     /// Grip mouse-down on this unit's bar.
     func beginInteractiveResize(pointer: CGPoint) {
         guard interactiveResize == nil else { return }
         interactiveResize = DockHeightDragSession(startHeight: settingsStore.dockPanelHeight.points,
-                                                  startPointerY: pointer.y)
+                                                  startPointerY: resizeDragCoordinate(pointer))
         showResizeCursor(at: pointer)
         setAutoHideInhibitor(.interactiveResize, active: true)
         onInteractiveHeightResizeSession?(true)
@@ -232,7 +285,7 @@ extension PanelCoordinator {
     func updateInteractiveResize(pointer: CGPoint) {
         guard let session = interactiveResize else { return }
         showResizeCursor(at: pointer)
-        let target = session.height(forPointerY: pointer.y)
+        let target = session.height(forPointerY: resizeDragCoordinate(pointer))
         guard target != settingsStore.dockPanelHeight else { return }
         settingsStore.setDockPanelHeight(target)
         if let onInteractiveHeightResizeUpdate {
@@ -240,6 +293,12 @@ extension PanelCoordinator {
         } else {
             commitInteractivePanelHeight()
         }
+    }
+
+    /// The pointer's position across the bar, growing away from its edge: y over a bottom bar,
+    /// leftward beside a right-edge column (which widens as the pointer moves left).
+    private func resizeDragCoordinate(_ pointer: CGPoint) -> CGFloat {
+        taskbarEdge.screenCanonical(pointer).y
     }
 
     func commitInteractivePanelHeight() {
@@ -275,14 +334,16 @@ extension PanelCoordinator {
         relayout(animated: false)
     }
 
-    /// Bar target frame: content width, capped; bar + drawer capsule centered as one group.
+    /// Bar target frame: content length along the bar, capped; bar + drawer capsule centered as one group.
     func dockTargetFrame(contentWidth: CGFloat, on screen: NSScreen) -> NSRect {
-        PanelGeometry.dockTargetFrame(contentWidth: contentWidth, on: Self.screenGeometry(screen), metrics: layoutMetrics)
+        PanelGeometry.dockTargetFrame(contentLength: contentWidth, on: Self.screenGeometry(screen),
+                                      metrics: layoutMetrics, edge: taskbarEdge)
     }
 
     /// 胶囊目标 frame（贴任务条右边、纵向居中）。只依赖传入的 dock **目标** frame。
     private func capsuleTargetFrame(forDock dockFrame: NSRect, on screen: NSScreen) -> NSRect {
-        PanelGeometry.capsuleTargetFrame(forDock: dockFrame, on: Self.screenGeometry(screen), metrics: layoutMetrics)
+        PanelGeometry.capsuleTargetFrame(forDock: dockFrame, on: Self.screenGeometry(screen),
+                                         metrics: layoutMetrics, edge: taskbarEdge)
     }
 
     /// 抽屉目标 frame（右边贴胶囊右边、**底边硬锚在胶囊上方、向上长**）。只依赖传入的胶囊 **目标** frame + 抽屉尺寸。
@@ -291,7 +352,8 @@ extension PanelCoordinator {
     func drawerTargetFrame(forCapsule capsuleFrame: NSRect, size: CGSize, on screen: NSScreen) -> NSRect {
         // 底部/左右定位使用 screen.frame，切断与原生 Dock visibleFrame 的耦合；
         // 顶部高度仍由 topUsableY 封顶，避免菜单栏和刘海遮挡。
-        PanelGeometry.drawerTargetFrame(forCapsule: capsuleFrame, size: size, on: Self.screenGeometry(screen), metrics: layoutMetrics)
+        PanelGeometry.drawerTargetFrame(forCapsule: capsuleFrame, size: size, on: Self.screenGeometry(screen),
+                                        metrics: layoutMetrics, edge: taskbarEdge)
     }
 
     /// 统一布局入口：算齐三个目标 frame、存好（给 drop zone / 开抽屉读），三面板同组动画到目标。
@@ -366,7 +428,9 @@ extension PanelCoordinator {
         // `fittingSize` 是**主线程上把整条任务条同步布局一遍**，不是读一个缓存值。
         // 探针量的就是它 + 宽度到底变没变（没变还跑动画就是纯浪费）。
         let measureStart = CACurrentMediaTime()
-        let measured = hosting.fittingSize.width - 2 * Self.shadowPadding
+        // The content's extent along the bar: its width on the bottom edge, its height in a column.
+        let fitting = hosting.fittingSize
+        let measured = (taskbarEdge.isVertical ? fitting.height : fitting.width) - 2 * Self.shadowPadding
         HoverTrace.relayout(measureMs: CACurrentMediaTime() - measureStart,
                             width: measured,
                             changed: measured != lastDesiredWidth,
@@ -445,6 +509,9 @@ extension PanelCoordinator {
     /// `starting` = 这次开始动的标签盒的起始宽。跟随窗已开着时只补登记新盒子，起步宽不重量。
     func beginLabelWidthFollow(starting: [String: CGFloat]) {
         guard !interactiveHeightResizeActive else { return }   // the drag owns the panel frames
+        // A column is as wide as its widest possible card (`columnWidth`) and a label never changes
+        // its length, so there is nothing to follow.
+        guard !taskbarEdge.isVertical else { return }
         let now = CACurrentMediaTime()
         if !isLabelFollowActive {
             labelFollowRestWidth = lastDesiredWidth
@@ -511,6 +578,14 @@ extension PanelCoordinator {
         relayout(animated: false)      // 切屏瞬时,不滑
         cancelFullscreenIntentIfContextChanged()
         reconcilePanelVisibility()
+    }
+
+    /// The Liquid Glass behind the bar lives in its own window, outside the SwiftUI backdrop the
+    /// strip fades itself. Faded on the view, not the window: the window's alpha belongs to the
+    /// show / hide fades (`applyPanelVisibility`), which reset it to 1.
+    func applyTaskbarBackgroundOpacity() {
+        let layers = TaskbarBackgroundOpacity.layers(for: settingsStore.taskbarBackgroundOpacity)
+        dockGlassBackgroundView?.alphaValue = CGFloat(layers.glass)
     }
 
     static func screenGeometry(_ screen: NSScreen) -> PanelScreenGeometry {

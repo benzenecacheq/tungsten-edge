@@ -143,6 +143,12 @@ enum ChipPillMetrics {
     /// 可见的缝来自图标资源自带的透明边距。
     static let cardWidth: CGFloat = 40
 
+    /// The widest card the bar can hold, at the native height: a titled card whose title hit
+    /// `WindowTitleTextMetrics.maximumWidth`. A vertical bar is this wide whatever it holds, so
+    /// a title growing or shrinking never moves the bar's edge.
+    static let maximumCardWidth: CGFloat = 2 * titledCardInset + 2 * horizontalPadding
+        + iconSlot + iconSpacing + WindowTitleTextMetrics.maximumWidth
+
     /// 卡与卡之间的间距。**定义在这里，`Style.chipSpacing` 引用它**——悬停归属判定
     /// （`StripHoverResolution` 的缝隙桥接量）也要用它，而 `Style` 是 private、
     /// 别的文件读不到，两处各写一个 2 迟早对不上。
@@ -584,6 +590,9 @@ struct WindowTitleTooltipStyle: Equatable {
 /// 叠加的话两块的描边会在接缝处交叉出一条横线，原生那颗是一整块连续的轮廓。
 struct WindowTitleTooltipShape: InsettableShape {
     let style: WindowTitleTooltipStyle
+    /// False beside a side-edge column: the bubble sits level with its card, so it is a plain
+    /// rounded plate with no tail.
+    var drawsTail = true
     /// `strokeBorder` 用：把描边**整条画在形状里面**。
     ///
     /// 原来用 `stroke`，它把线骑在轮廓上——0.5pt 的线有一半落到形状外，被抗锯齿吃掉一半，
@@ -598,6 +607,9 @@ struct WindowTitleTooltipShape: InsettableShape {
 
     func path(in outerRect: CGRect) -> Path {
         let rect = outerRect.insetBy(dx: insetAmount, dy: insetAmount)
+        guard drawsTail else {
+            return Path(roundedRect: rect, cornerRadius: min(style.cornerRadius, rect.height / 2), style: .continuous)
+        }
         let tail = style.tailHeight
         let body = CGRect(x: rect.minX, y: rect.minY,
                           width: rect.width, height: max(0, rect.height - tail))
@@ -645,18 +657,30 @@ struct WindowTitleTooltipView: View {
     /// 底板走不走真·液态玻璃。**同样不给默认值**，值由 `PanelCoordinator` 传
     /// （它的 `usesLiquidGlass` 是全局唯一来源）。
     let usesLiquidGlass: Bool
+    /// True above a bottom bar: one line, tail pointing down at the card. False beside a
+    /// side-edge column: no tail, as many lines as the title has (`\n`), and wider, since the
+    /// bubble there exists to show a label the column cut off. No default, like `style`.
+    let pointsDown: Bool
 
     @Environment(\.colorScheme) private var colorScheme
     private var theme: DockThemeTokens { .resolved(for: colorScheme) }
 
+    /// Beside a column: the widest the bubble's text may get, and the space above and below it
+    /// (one line then comes out at `style.height`).
+    static let sideMaximumWidth: CGFloat = 640
+    static let sideVerticalPadding: CGFloat = 4.5
+
+    private var maximumWidth: CGFloat { pointsDown ? style.maximumWidth : Self.sideMaximumWidth }
+
     var body: some View {
-        let shape = WindowTitleTooltipShape(style: style)
+        let shape = WindowTitleTooltipShape(style: style, drawsTail: pointsDown)
         return label
-            .frame(maxWidth: style.maximumWidth)
+            .frame(maxWidth: maximumWidth)
             .padding(.horizontal, style.horizontalPadding)
             // 文字盒撑满主体高度并居中；尖角靠额外的下内边距占位，文字不会被它带偏。
-            .frame(height: style.height)
-            .padding(.bottom, style.tailHeight)
+            .frame(height: pointsDown ? style.height : nil)
+            .padding(.vertical, pointsDown ? 0 : Self.sideVerticalPadding)
+            .padding(.bottom, pointsDown ? style.tailHeight : 0)
             .background(plate(shape: shape))
             // The system glass brings its own edge light and shadow; ours go only with our plate.
             .overlay {
@@ -702,13 +726,14 @@ struct WindowTitleTooltipView: View {
             Text(title)
                 .font(.system(size: style.fontSize, weight: .regular))
                 .foregroundStyle(theme.tooltipText.color)
-                .lineLimit(1)
+                .lineLimit(pointsDown ? 1 : nil)
                 .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: !pointsDown)
         } else {
             // The frame is computed here, from the title, not taken from the AppKit view: the panel
             // is sized from `fittingSize` in the same turn the title is swapped in, and a
             // representable's intrinsic size still describes the previous title at that point.
-            let size = UnsmoothedLabel.size(of: title, fontSize: style.fontSize, maximumWidth: style.maximumWidth)
+            let size = UnsmoothedLabel.size(of: title, fontSize: style.fontSize, maximumWidth: maximumWidth)
             UnsmoothedLabel(title: title, fontSize: style.fontSize, tint: theme.tooltipText)
                 .frame(width: size.width, height: size.height)
         }

@@ -65,7 +65,8 @@ struct DockPanelHeight: Equatable {
             capsuleWidth: points,
             capsuleGap: 8,
             minimumDockWidth: 120 * scale,
-            minimumDrawerExtent: 120
+            minimumDrawerExtent: 120,
+            columnWidth: (ChipPillMetrics.maximumCardWidth + 2 * PanelLayoutMetrics.columnInset) * scale
         )
     }
 }
@@ -80,9 +81,50 @@ struct PanelLayoutMetrics: Equatable {
     var capsuleGap: CGFloat
     var minimumDockWidth: CGFloat
     var minimumDrawerExtent: CGFloat
+    /// The bar's thickness when it stands along a side edge (`TaskbarEdge.isVertical`). There the
+    /// cards stack top to bottom and the bar is as wide as the widest card it could hold.
+    var columnWidth: CGFloat
+    /// The room beside a column card's icon for its label (`withColumnLabels`).
+    var columnLabelWidth: CGFloat = PanelLayoutMetrics.columnLabelWidth(
+        fontSize: CGFloat(AppSettingsStore.defaultColumnLabelFontSize))
+    /// Where a column sits between the top (0) and the bottom (1) of its range; 0.5 = centred.
+    var columnVerticalPosition: CGFloat = 0.5
+    /// Which end of the column stays at `columnVerticalPosition` as its length changes.
+    var columnGrowth: ColumnGrowth = .both
 
     /// Fixed; never scales with the bar height (see `DockPanelHeight.metrics`).
     static let shadowPadding: CGFloat = 20
+
+    /// The room for a column card's label. It follows the label's point size, not the bar's
+    /// size, so icons and text are sized independently; at the default 15pt it is the 150pt a
+    /// native-size card leaves beside its icon.
+    static func columnLabelWidth(fontSize: CGFloat) -> CGFloat {
+        let room = ChipPillMetrics.maximumCardWidth - ChipPillMetrics.cardWidth - ChipPillMetrics.iconSpacing
+        return room * fontSize / CGFloat(AppSettingsStore.defaultColumnLabelFontSize)
+    }
+
+    /// The narrowest a label's room gets when the column is dragged narrower.
+    static let minimumColumnLabelWidth: CGFloat = 40
+
+    /// These metrics with a column wide enough for its icon cards at this bar size plus labels
+    /// of `labelFontSize` points, widened by `widthAdjustment` (the dragged inner edge), and
+    /// placed at `verticalPosition`.
+    func withColumnLabels(fontSize labelFontSize: CGFloat, widthAdjustment: CGFloat = 0,
+                          verticalPosition: CGFloat = 0.5, growth: ColumnGrowth = .both) -> PanelLayoutMetrics {
+        var metrics = self
+        let scale = panelHeight / DockPanelHeight.native.points
+        metrics.columnLabelWidth = max(Self.minimumColumnLabelWidth,
+                                       Self.columnLabelWidth(fontSize: labelFontSize) + widthAdjustment)
+        metrics.columnWidth = (ChipPillMetrics.cardWidth + ChipPillMetrics.iconSpacing
+                               + 2 * Self.columnInset) * scale
+            + metrics.columnLabelWidth
+        metrics.columnVerticalPosition = min(max(verticalPosition, 0), 1)
+        metrics.columnGrowth = growth
+        return metrics
+    }
+    /// A vertical bar's margin on each side of its cards, at the native height: an icon card
+    /// (40pt) then sits centred in a 54pt band, as it does across a horizontal bar's height.
+    static let columnInset: CGFloat = (ChipPillMetrics.chipHeight - ChipPillMetrics.cardWidth) / 2
 
     /// Native-height baseline for default parameters and tests; real values come from
     /// `DockPanelHeight.metrics`.
@@ -359,6 +401,68 @@ enum PanelGeometry {
         )
     }
 
+    /// `contentLength` is the content's extent along the bar. On a side edge the bar is a column
+    /// `columnWidth` wide, `bottomGap` off the edge, and it and the drawer capsule below it are
+    /// placed as one group between the screen's bottom and `topUsableY`, so the column never runs
+    /// under the menu bar. `columnVerticalPosition` picks a fixed point in that range (0 = the
+    /// top, 1 = the bottom) and `columnGrowth` which end of the group stays on it: the top, the
+    /// bottom, or the middle. A group that would run past the range is pushed back inside it.
+    static func dockTargetFrame(
+        contentLength: CGFloat,
+        on screen: PanelScreenGeometry,
+        metrics: PanelLayoutMetrics = .tungstenEdge,
+        edge: TaskbarEdge
+    ) -> CGRect {
+        guard edge.isVertical else {
+            return dockTargetFrame(contentWidth: contentLength, on: screen, metrics: metrics)
+        }
+        let trailing = metrics.capsuleGap + metrics.capsuleWidth
+        let top = screen.topUsableY - metrics.outerMargin
+        let bottom = screen.frame.minY + metrics.outerMargin
+        let maxLength = top - bottom - trailing
+        let length = max(min(contentLength, maxLength), metrics.minimumDockWidth)
+        let group = length + trailing
+        let anchor = top - (top - bottom) * metrics.columnVerticalPosition
+        let groupTop: CGFloat
+        switch metrics.columnGrowth {
+        case .down: groupTop = anchor
+        case .up: groupTop = anchor + group
+        case .both: groupTop = anchor + group / 2
+        }
+        let clampedTop = min(max(groupTop, bottom + group), top)
+        let barMinY = clampedTop - length
+        let barMinX = screen.frame.maxX - metrics.bottomGap - metrics.columnWidth
+        return CGRect(
+            x: barMinX - metrics.shadowPadding,
+            y: barMinY - metrics.shadowPadding,
+            width: metrics.columnWidth + metrics.shadowPadding * 2,
+            height: length + metrics.shadowPadding * 2
+        )
+    }
+
+    /// On a side edge the capsule sits under the bar, flush with its inner edge: that centres it
+    /// on the column the icon cards line up in.
+    static func capsuleTargetFrame(
+        forDock dockFrame: CGRect,
+        on screen: PanelScreenGeometry,
+        metrics: PanelLayoutMetrics = .tungstenEdge,
+        edge: TaskbarEdge
+    ) -> CGRect {
+        guard edge.isVertical else {
+            return capsuleTargetFrame(forDock: dockFrame, on: screen, metrics: metrics)
+        }
+        let rawX = dockFrame.minX + metrics.shadowPadding
+        let rawY = dockFrame.minY + metrics.shadowPadding - metrics.capsuleGap - metrics.capsuleWidth
+        let clampedX = min(max(rawX, screen.frame.minX), screen.frame.maxX - metrics.capsuleWidth)
+        let clampedY = min(max(rawY, screen.frame.minY), screen.frame.maxY - metrics.capsuleWidth)
+        return CGRect(
+            x: clampedX - metrics.shadowPadding,
+            y: clampedY - metrics.shadowPadding,
+            width: metrics.capsuleWidth + metrics.shadowPadding * 2,
+            height: metrics.capsuleWidth + metrics.shadowPadding * 2
+        )
+    }
+
     static func capsuleTargetFrame(
         forDock dockFrame: CGRect,
         on screen: PanelScreenGeometry,
@@ -465,6 +569,67 @@ enum PanelGeometry {
 
     static let stackPopupTopGap: CGFloat = 8
 
+    // MARK: Popups beside a vertical bar
+    //
+    // Next to a side-edge bar a popup opens toward the screen's middle, its plate vertically
+    // centred on the anchor and clamped between the screen's bottom and `topUsableY`. The window
+    // keeps the same layout as one above a bottom bar (border all round, arrow strip at the
+    // bottom) so the content views do not change; the arrow is hidden (`StackPopupArrowModel`).
+
+    /// Height a plate beside a vertical bar may take: the screen's height below `topUsableY`,
+    /// less `stackPopupTopGap` at either end.
+    static func sidePopupAvailablePlateHeight(on screen: PanelScreenGeometry) -> CGFloat {
+        screen.topUsableY - screen.frame.minY - 2 * stackPopupTopGap
+    }
+
+    /// The popup window's frame beside a right-edge bar. `size` is the whole window.
+    static func sidePopupTargetFrame(
+        anchorVisibleRect: CGRect,
+        size: CGSize,
+        on screen: PanelScreenGeometry,
+        metrics: PanelLayoutMetrics = .tungstenEdge
+    ) -> CGRect {
+        let m = StackPopupMetrics.self
+        let chrome = 2 * m.panelMargin + m.arrowHeight
+        let available = sidePopupAvailablePlateHeight(on: screen)
+        let plateHeight = max(min(size.height - chrome, available), min(metrics.minimumDrawerExtent, available))
+        let floor = screen.frame.minY + stackPopupTopGap
+        let ceiling = screen.topUsableY - stackPopupTopGap
+        let plateMinY = min(max(anchorVisibleRect.midY - plateHeight / 2, floor), ceiling - plateHeight)
+        // The plate stops where a bottom bar's popup arrow would end: tip gap plus arrow.
+        let plateMaxX = anchorVisibleRect.minX - m.tipGap - m.arrowHeight
+        return CGRect(
+            x: plateMaxX + m.panelMargin - size.width,
+            y: plateMinY - m.panelMargin - m.arrowHeight,
+            width: size.width,
+            height: plateHeight + chrome
+        )
+    }
+
+    /// Where a popup's window goes for the bar's edge.
+    static func stackPopupTargetFrame(
+        anchorVisibleRect: CGRect,
+        size: CGSize,
+        on screen: PanelScreenGeometry,
+        metrics: PanelLayoutMetrics = .tungstenEdge,
+        edge: TaskbarEdge
+    ) -> CGRect {
+        edge.isVertical
+            ? sidePopupTargetFrame(anchorVisibleRect: anchorVisibleRect, size: size, on: screen, metrics: metrics)
+            : folderPopupTargetFrame(anchorVisibleRect: anchorVisibleRect, size: size, on: screen, metrics: metrics)
+    }
+
+    /// The grid's room for the bar's edge (see `stackPopupAvailablePlateHeight`).
+    static func stackPopupAvailablePlateHeight(
+        anchorVisibleRect: CGRect,
+        on screen: PanelScreenGeometry,
+        edge: TaskbarEdge
+    ) -> CGFloat {
+        edge.isVertical
+            ? sidePopupAvailablePlateHeight(on: screen)
+            : stackPopupAvailablePlateHeight(anchorVisibleRect: anchorVisibleRect, on: screen)
+    }
+
     /// The visible part of the popup window — plate plus arrow strip. Hit tests use this, never
     /// the window frame: the border is 40pt of nothing.
     static func folderPopupPlateFrame(panelFrame: CGRect) -> CGRect {
@@ -500,6 +665,30 @@ enum PanelGeometry {
         )
     }
 
+    /// Beside a vertical bar the bubble sits left of the pill, vertically centred on it, `tipGap`
+    /// away and 8pt inside the screen.
+    static func windowTitleTooltipTargetFrame(
+        anchorVisibleRect: CGRect,
+        size: CGSize,
+        tipGap: CGFloat,
+        on screen: PanelScreenGeometry,
+        edge: TaskbarEdge
+    ) -> CGRect {
+        guard edge.isVertical else {
+            return windowTitleTooltipTargetFrame(anchorVisibleRect: anchorVisibleRect, size: size,
+                                                 tipGap: tipGap, on: screen)
+        }
+        let inset = windowTitleTooltipShadowPadding
+        let visibleWidth = max(0, size.width - 2 * inset)
+        let visibleHeight = max(0, size.height - 2 * inset)
+        let minVisibleX = screen.frame.minX + windowTitleTooltipScreenMargin
+        let visibleX = max(anchorVisibleRect.minX - tipGap - visibleWidth, minVisibleX)
+        let minVisibleY = screen.frame.minY + windowTitleTooltipScreenMargin
+        let maxVisibleY = screen.topUsableY - visibleHeight
+        let visibleY = min(max(anchorVisibleRect.midY - visibleHeight / 2, minVisibleY), maxVisibleY)
+        return CGRect(x: visibleX - inset, y: visibleY - inset, width: size.width, height: size.height)
+    }
+
     /// The drawer is a stack popup anchored on its capsule: this is the capsule's visible rect,
     /// the anchor every `folderPopup…` function takes.
     static func drawerAnchorVisibleRect(
@@ -513,27 +702,32 @@ enum PanelGeometry {
         forCapsule capsuleFrame: CGRect,
         size: CGSize,
         on screen: PanelScreenGeometry,
-        metrics: PanelLayoutMetrics = .tungstenEdge
+        metrics: PanelLayoutMetrics = .tungstenEdge,
+        edge: TaskbarEdge = .bottom
     ) -> CGRect {
-        folderPopupTargetFrame(
+        stackPopupTargetFrame(
             anchorVisibleRect: drawerAnchorVisibleRect(forCapsule: capsuleFrame, metrics: metrics),
-            size: size, on: screen, metrics: metrics)
+            size: size, on: screen, metrics: metrics, edge: edge)
     }
 
-    /// Rows and columns the drawer's grid may take above its capsule on this screen.
+    /// Rows and columns the drawer's grid may take above (or, on a side edge, beside) its capsule.
     static func drawerGridLimits(
         forCapsule capsuleFrame: CGRect,
         on screen: PanelScreenGeometry,
-        metrics: PanelLayoutMetrics = .tungstenEdge
+        metrics: PanelLayoutMetrics = .tungstenEdge,
+        edge: TaskbarEdge = .bottom
     ) -> StackGridLayout.Limits {
         StackGridLayout.drawerLimits(
             screenSize: screen.frame.size,
             availablePlateHeight: stackPopupAvailablePlateHeight(
-                anchorVisibleRect: drawerAnchorVisibleRect(forCapsule: capsuleFrame, metrics: metrics), on: screen))
+                anchorVisibleRect: drawerAnchorVisibleRect(forCapsule: capsuleFrame, metrics: metrics),
+                on: screen, edge: edge))
     }
 
     /// The pointer's lower bound for "inside the drawer body" while dragging a strip chip: the
     /// capsule's top, i.e. the bar's top edge. `plate` is `folderPopupPlateFrame` of the drawer.
+    /// On a side edge both go through `TaskbarEdge.screenCanonical` first, where the bound is the
+    /// plate's inner side instead.
     static func drawerBodyFloorY(plate: CGRect) -> CGFloat {
         plate.minY - StackPopupMetrics.tipGap
     }

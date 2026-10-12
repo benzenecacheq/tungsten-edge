@@ -9,8 +9,8 @@ import SwiftUI
 /// The view is `arrowHeight` taller than the plate: the arrow hangs in that strip.
 struct StackPopupBackdrop: View {
     let plateSize: CGSize
-    /// Arrow centre from the plate's left edge.
-    let arrowCenterX: CGFloat
+    /// Arrow centre from the plate's left edge; nil draws the plate without an arrow.
+    let arrowCenterX: CGFloat?
     let usesLiquidGlass: Bool
 
     @Environment(\.colorScheme) private var colorScheme
@@ -35,7 +35,7 @@ struct StackPopupBackdrop: View {
 
 struct StackPopupShape: Shape {
     let plateSize: CGSize
-    let arrowCenterX: CGFloat
+    let arrowCenterX: CGFloat?
 
     func path(in rect: CGRect) -> Path {
         Path(StackPopupOutline.path(plateSize: plateSize, arrowCenterX: arrowCenterX))
@@ -48,7 +48,7 @@ struct StackPopupShape: Shape {
 @available(macOS 26.0, *)
 private struct StackGlassPlate: NSViewRepresentable {
     let plateSize: CGSize
-    let arrowCenterX: CGFloat
+    let arrowCenterX: CGFloat?
 
     func makeNSView(context: Context) -> StackGlassContainer {
         let view = StackGlassContainer()
@@ -66,7 +66,7 @@ private struct StackGlassPlate: NSViewRepresentable {
 final class StackGlassContainer: NSView {
     private let glass = NSGlassEffectView()
     private var plateSize = CGSize.zero
-    private var arrowCenterX: CGFloat = 0
+    private var arrowCenterX: CGFloat?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -84,7 +84,7 @@ final class StackGlassContainer: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func apply(plateSize: CGSize, arrowCenterX: CGFloat) {
+    func apply(plateSize: CGSize, arrowCenterX: CGFloat?) {
         guard plateSize != self.plateSize || arrowCenterX != self.arrowCenterX else { return }
         self.plateSize = plateSize
         self.arrowCenterX = arrowCenterX

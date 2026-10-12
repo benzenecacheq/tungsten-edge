@@ -35,8 +35,8 @@ extension DockStripView {
             guard let pointer = pointerBox.value, origin != .zero else { return nil }
             let point = CGPoint(x: pointer.x - origin.minX, y: origin.maxY - pointer.y)
             let hit = StripHoverResolution.chip(
-                at: point,
-                frames: frames,
+                at: barPoint(point),
+                frames: barFrames(frames),
                 gapBridge: StripHoverResolution.defaultGapBridge * dockScale
             )
             // 正在飞回去的 / 刚落定还没等到指针移动的那**一张**不给悬停，别的卡照常
@@ -62,7 +62,7 @@ extension DockStripView {
     ///
     /// **弹的是应用名，不是窗口标题**（owner 2026-08-17，原生 Dock 的标签永远只写应用名）。
     /// 固定文件夹弹文件夹全名——卡上不写名字；分隔线不是 chip。
-    private func bubbleTitle(for entry: StripEntry) -> String? {
+    func bubbleTitle(for entry: StripEntry) -> String? {
         switch entry {
         case let .window(item):
             return appBubbleName(bundleID: item.bundleIdentifier, fallback: item.appID)
@@ -98,6 +98,16 @@ extension DockStripView {
     ///
     /// 安静档不弹气泡（`hoverStyle.isExpressive`），与改造前的 `showsHover` 门槛一致。
     func bubbleRequest(projection: StripProjection) -> WindowTitleTooltipRequest? {
+        // A column already writes every card's name beside it: its bubble only completes a label
+        // that was cut off, whatever the hover style.
+        if taskbarEdge.isVertical {
+            guard !isPanelHeightResizing,
+                  let id = hoveredEntryID,
+                  let anchor = hoveredAnchor,
+                  let entry = projection.entries.first(where: { $0.id == id }),
+                  let text = columnBubbleText(for: entry) else { return nil }
+            return WindowTitleTooltipRequest(chipID: id, title: text, anchorVisibleRect: anchor)
+        }
         guard !isPanelHeightResizing, hoverStyle.isExpressive,
               let id = hoveredEntryID,
               let anchor = hoveredAnchor,
@@ -112,20 +122,29 @@ extension DockStripView {
     func taskbarMenuZoneClaims(atScreen global: CGPoint) -> Bool {
         guard let point = stripPoint(from: global) else { return false }
         return StripContextMenuZone.claims(
-            point: point,
+            point: barPoint(point),
             chipFrames: allStripChipFrames(),
-            bounds: CGRect(origin: .zero, size: stripRootScreenRect.size),
+            bounds: barBounds,
             minimumGapWidth: StripContextMenuZone.defaultMinimumGapWidth * dockScale
         )
     }
+
+    /// A column's inner edge: the band left of the cards' inset, the bar's full length.
+    func columnWidthGripClaims(atScreen global: CGPoint) -> Bool {
+        guard taskbarEdge.isVertical, let point = stripPoint(from: global) else { return false }
+        let band = min(Self.columnWidthGripBand, PanelLayoutMetrics.columnInset * dockScale)
+        return point.x >= 0 && point.x < band && point.y >= 0 && point.y <= stripRootScreenRect.height
+    }
+
+    static let columnWidthGripBand: CGFloat = 6
 
     /// Drag-to-resize grip (and its ▲▼ glyph): the right-click zones kept clear of the chips.
     func resizeGripZoneClaims(atScreen global: CGPoint) -> Bool {
         guard let point = stripPoint(from: global) else { return false }
         return StripContextMenuZone.gripClaims(
-            point: point,
+            point: barPoint(point),
             chipFrames: allStripChipFrames(),
-            bounds: CGRect(origin: .zero, size: stripRootScreenRect.size),
+            bounds: barBounds,
             minimumGapWidth: StripContextMenuZone.defaultMinimumGapWidth * dockScale,
             chipClearance: StripContextMenuZone.defaultGripChipClearance * dockScale
         )
@@ -141,12 +160,13 @@ extension DockStripView {
         return resizeGripZoneClaims(atScreen: global)
     }
 
+    /// Every card on the bar, in the bar's frame of reference (`barFrame`).
     private func allStripChipFrames() -> [CGRect] {
         var frames = Array(chipFrames.values)
         frames.append(contentsOf: folderChipFrames.values)
         frames.append(contentsOf: messagingChipFrames.values)
         if shelfFrame != .zero { frames.append(shelfFrame) }
         if settingsStore.showTrash, trashFrame != .zero { frames.append(trashFrame) }
-        return frames
+        return frames.map(barFrame)
     }
 }

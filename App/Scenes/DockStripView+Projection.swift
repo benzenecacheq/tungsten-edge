@@ -62,7 +62,9 @@ extension DockStripView {
             let appWindows = items.filter { $0.bundleIdentifier == bid && !$0.isAppLevelFallback }
             // 认主窗口的三条规则在纯 `MessagingMainWindowDecision` 里（标题匹配 → 排除后唯一 → 认不出）；
             // 这里只把窗口事实喂进去。
-            let mainID = MessagingMainWindowDecision.mainWindowID(
+            // The tile takes one of the app's windows whenever it has any (`tileWindowID`); the
+            // others are drawn right after the tile (see `pinnedWindows` below).
+            let mainID = MessagingMainWindowDecision.tileWindowID(
                 bundleID: bid,
                 windows: appWindows.map {
                     .init(id: $0.id, title: $0.title,
@@ -184,12 +186,32 @@ extension DockStripView {
         // （`stripOrderStore.reconciled`）和多屏过滤都已经跑完，所以空档进不了 `liveOrderIDs`
         // 和 `appKeys`——顺序层一旦记住这个幽灵 id，就会在它消失后按 5s 缺席锚点继续为它留位。
         // 规矩与多屏过滤同源：只在顺序层之后动渲染数组。
+        // A pinned app's other windows are drawn right after its tile, in the pinned zone, instead
+        // of in the live zone. Only the rendering moves: they stay in `liveOrderIDs` (the order
+        // layer keeps their places, and they come back there if the app is unpinned).
+        let pinnedWindows = renderedLive.filter { entry in
+            guard case let .window(item) = entry else { return false }
+            return !item.isAppLevelFallback && msgSet.contains(item.bundleIdentifier ?? "")
+        }
+        // On a side edge the system's Apps entry (macOS 26+, kept in the live zone on a fresh
+        // install) heads the bar, above the pinned apps. Rendering only, like `pinnedWindows`.
+        let appsLauncherID = KeptAppStore.systemAppLauncherBundleID
+        let headLaunchers = !taskbarEdge.isVertical ? [] : renderedLive.filter { entry in
+            switch entry {
+            case let .keptApp(bid): return bid == appsLauncherID
+            case let .window(item): return item.bundleIdentifier == appsLauncherID
+            default: return false
+            }
+        }
+        let pinnedWindowIDs = Set((headLaunchers + pinnedWindows).map(\.id))
+        let unpinnedLive = renderedLive.filter { !pinnedWindowIDs.contains($0.id) }
         let liveWithGhost: [StripEntry] = {
-            guard let ghost = externalDropGhost, case let .live(bundleID) = ghost.zone else { return renderedLive }
+            guard let ghost = externalDropGhost, case let .live(bundleID) = ghost.zone else { return unpinnedLive }
             // 序号是上一帧按卡帧算的，这一帧 live 区可能已经少了一张卡（应用退出 / 换屏过滤），
-            // 所以必须夹住——`insert(at:)` 越界是直接崩。
-            let index = min(max(ghost.insertIndex, 0), renderedLive.count)
-            var next = renderedLive
+            // 所以必须夹住——`insert(at:)` 越界是直接崩。The index counts every window card by
+            // position, and the pinned zone's ones all come first, so they are taken off.
+            let index = min(max(ghost.insertIndex - pinnedWindowIDs.count, 0), unpinnedLive.count)
+            var next = unpinnedLive
             next.insert(.externalDropGhost(key: bundleID), at: index)
             return next
         }()
@@ -213,7 +235,16 @@ extension DockStripView {
         // The shelf is the last cell of the pinned-app (messaging) zone and shares its divider.
         // Folders sit at the bar's tail in one zone with the Trash, as on the native Dock: no
         // divider between them.
-        let headEntries = messaging + (settingsStore.showShelf ? [StripEntry.shelf] : [])
+        // Pinned to the taskbar instead, the Apps entry still goes first on a side edge.
+        let headTiles = !taskbarEdge.isVertical ? messaging
+            : messaging.filter { $0.id == "msg-app-\(appsLauncherID)" } + messaging.filter { $0.id != "msg-app-\(appsLauncherID)" }
+        let headEntries = headLaunchers + headTiles.flatMap { tile -> [StripEntry] in
+            guard case let .messagingApp(bid, _) = tile else { return [tile] }
+            return [tile] + pinnedWindows.filter { entry in
+                if case let .window(item) = entry { return item.bundleIdentifier == bid }
+                return false
+            }
+        } + (settingsStore.showShelf ? [StripEntry.shelf] : [])
         let tailEntries = pinnedEntries + (settingsStore.showTrash ? [StripEntry.trash] : [])
         var zones = [headEntries, liveWithGhost, tailEntries]
             .map { zone in zone.filter { $0.id != collapsedEntryID } }
@@ -291,6 +322,7 @@ extension DockStripView {
             entries: entries,
             layoutKeys: entries.map(StripLayoutKey.init),
             messagingIDs: messagingIDs,
+            pinnedWindowIDs: pinnedWindowIDs,
             draggingID: draggingID,
             badgeEntryIDByBundle: badgeEntryIDByBundle
         )

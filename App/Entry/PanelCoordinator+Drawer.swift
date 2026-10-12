@@ -75,7 +75,8 @@ extension PanelCoordinator {
     private func drawerAnchor(on screen: NSScreen) -> (capsuleRef: NSRect, limits: StackGridLayout.Limits) {
         let screenGeometry = Self.screenGeometry(screen)
         let capsuleRef = lastCapsuleTargetFrame == .zero ? (capsulePanel?.frame ?? .zero) : lastCapsuleTargetFrame
-        return (capsuleRef, PanelGeometry.drawerGridLimits(forCapsule: capsuleRef, on: screenGeometry, metrics: layoutMetrics))
+        return (capsuleRef, PanelGeometry.drawerGridLimits(forCapsule: capsuleRef, on: screenGeometry,
+                                                           metrics: layoutMetrics, edge: taskbarEdge))
     }
 
     /// Smaller than any plate means the host has not laid out yet, never a real size.
@@ -135,6 +136,8 @@ extension PanelCoordinator {
         guard let capsule, let drawer, capsule != .zero, drawer != .zero else { return }
         let offset = capsule.midX - drawer.midX   // the capsule's visible rect is inset symmetrically
         if drawerArrow.offsetFromCenter != offset { drawerArrow.offsetFromCenter = offset }
+        let hidden = taskbarEdge.isVertical
+        if drawerArrow.isHidden != hidden { drawerArrow.isHidden = hidden }
     }
 
     private func makeDrawerRootView(limits: StackGridLayout.Limits) -> DrawerRootView {
@@ -150,6 +153,7 @@ extension PanelCoordinator {
                        },
                        usesLiquidGlass: usesLiquidGlass,
                        isDrawerOpen: { [weak self] in self?.drawerPanel?.isVisible == true },
+                       taskbarEdge: { [weak self] in self?.taskbarEdge ?? .default },
                        onPrimaryAction: { [weak self] in self?.closeDrawerAfterAction() },
                        runtime: runtime, drawerStore: drawerStore, messagingStore: messagingStore,
                        drawerOrderStore: drawerOrderStore, dragController: dragController,
@@ -295,8 +299,16 @@ extension PanelCoordinator {
                 // 而过冲向下（owner 2026-06-21"先向下扩展再上移"的真因）。
                 let inset = Self.drawerPlateFrame(d)   // bottom = arrow tip, 3pt above the bar's top
                 // 投放区向上延伸到与抽屉一致的顶部上限：避让菜单栏/刘海，但不避让原生 Dock。
-                let top = Self.screenGeometry(panelCurrentScreen(panel: drawer)).topUsableY
-                zones.append(CGRect(x: inset.minX, y: inset.minY, width: inset.width, height: max(inset.height, top - inset.minY)))
+                let geometry = Self.screenGeometry(panelCurrentScreen(panel: drawer))
+                let top = geometry.topUsableY
+                if taskbarEdge.isVertical {
+                    // Beside a column the plate re-centres on the capsule as it grows, so it has no
+                    // fixed edge to hang the zone from: take its width over the screen's full height.
+                    let bottom = geometry.frame.minY
+                    zones.append(CGRect(x: inset.minX, y: bottom, width: inset.width, height: top - bottom))
+                } else {
+                    zones.append(CGRect(x: inset.minX, y: inset.minY, width: inset.width, height: max(inset.height, top - inset.minY)))
+                }
             }
             return zones
         case .drawer:

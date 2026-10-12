@@ -351,7 +351,7 @@ final class PanelGeometryTests: XCTestCase {
         XCTAssertEqual(DockPanelHeight.native.metrics, PanelLayoutMetrics(
             panelHeight: 54, shadowPadding: 20, windowHeight: 94,
             bottomGap: 8, outerMargin: 12, capsuleWidth: 54, capsuleGap: 8,
-            minimumDockWidth: 120, minimumDrawerExtent: 120
+            minimumDockWidth: 120, minimumDrawerExtent: 120, columnWidth: 210
         ))
         XCTAssertEqual(PanelLayoutMetrics.tungstenEdge, DockPanelHeight.native.metrics)
     }
@@ -577,6 +577,172 @@ final class PanelGeometryTests: XCTestCase {
         let tops = [40, 54, 80].map { DockPanelHeight(clamping: $0).metrics }.map { screenMinY + $0.bottomGap + $0.panelHeight }
         XCTAssertEqual(tops, [-352, -338, -312])
         XCTAssertEqual(tops, tops.sorted(), "抬升目标随条高单调上升")
+    }
+
+    // MARK: Right-edge bar
+
+    /// 1512 × 982 with a 33pt menu bar: `topUsableY` 949.
+    private var rightEdgeScreen: PanelScreenGeometry {
+        screen(frame: CGRect(x: 0, y: 0, width: 1512, height: 982),
+               visibleFrame: CGRect(x: 0, y: 0, width: 1512, height: 949))
+    }
+
+    func testRightEdgeBarIsAColumnHuggingTheRightEdge() {
+        let dock = PanelGeometry.dockTargetFrame(contentLength: 400, on: rightEdgeScreen, metrics: metrics, edge: .right)
+        let visible = dock.insetBy(dx: metrics.shadowPadding, dy: metrics.shadowPadding)
+
+        XCTAssertEqual(visible.maxX, 1512 - metrics.bottomGap, "bottomGap off the right edge")
+        XCTAssertEqual(visible.width, metrics.columnWidth)
+        XCTAssertEqual(visible.height, 400, "content length runs down the column")
+    }
+
+    func testRightEdgeBarAndCapsuleAreCentredAsOneGroupBelowTheMenuBar() {
+        let dock = PanelGeometry.dockTargetFrame(contentLength: 400, on: rightEdgeScreen, metrics: metrics, edge: .right)
+        let capsule = PanelGeometry.capsuleTargetFrame(forDock: dock, on: rightEdgeScreen, metrics: metrics, edge: .right)
+        let bar = dock.insetBy(dx: metrics.shadowPadding, dy: metrics.shadowPadding)
+        let cap = capsule.insetBy(dx: metrics.shadowPadding, dy: metrics.shadowPadding)
+
+        XCTAssertEqual(cap.maxY, bar.minY - metrics.capsuleGap, "capsule sits capsuleGap under the bar")
+        XCTAssertEqual(cap.minX, bar.minX, "flush with the column's inner edge")
+        XCTAssertEqual(cap.width, metrics.capsuleWidth)
+        let rangeMid = (metrics.outerMargin + (949 - metrics.outerMargin)) / 2
+        XCTAssertEqual((cap.minY + bar.maxY) / 2, rangeMid, "group centred between the bottom and the menu bar")
+    }
+
+    func testRightEdgeBarIsCappedBelowTheMenuBar() {
+        let dock = PanelGeometry.dockTargetFrame(contentLength: 5000, on: rightEdgeScreen, metrics: metrics, edge: .right)
+        let capsule = PanelGeometry.capsuleTargetFrame(forDock: dock, on: rightEdgeScreen, metrics: metrics, edge: .right)
+        let bar = dock.insetBy(dx: metrics.shadowPadding, dy: metrics.shadowPadding)
+        let cap = capsule.insetBy(dx: metrics.shadowPadding, dy: metrics.shadowPadding)
+
+        XCTAssertEqual(bar.maxY, 949 - metrics.outerMargin)
+        XCTAssertEqual(cap.minY, metrics.outerMargin)
+    }
+
+    func testColumnVerticalPositionMovesTheGroupBetweenTopAndBottom() {
+        func group(_ position: CGFloat) -> (bar: CGRect, cap: CGRect) {
+            let m = metrics.withColumnLabels(fontSize: 15, verticalPosition: position)
+            let dock = PanelGeometry.dockTargetFrame(contentLength: 400, on: rightEdgeScreen, metrics: m, edge: .right)
+            let capsule = PanelGeometry.capsuleTargetFrame(forDock: dock, on: rightEdgeScreen, metrics: m, edge: .right)
+            return (dock.insetBy(dx: m.shadowPadding, dy: m.shadowPadding),
+                    capsule.insetBy(dx: m.shadowPadding, dy: m.shadowPadding))
+        }
+        XCTAssertEqual(group(0).bar.maxY, 949 - metrics.outerMargin, "top: against the menu bar")
+        XCTAssertEqual(group(1).cap.minY, metrics.outerMargin, "bottom: capsule against the screen bottom")
+        let middle = group(0.5)
+        XCTAssertEqual((middle.cap.minY + middle.bar.maxY) / 2, (metrics.outerMargin + 949 - metrics.outerMargin) / 2)
+    }
+
+    func testColumnGrowthKeepsTheChosenEndFixedAsTheLengthChanges() {
+        func group(_ length: CGFloat, _ growth: ColumnGrowth, at position: CGFloat) -> (top: CGFloat, bottom: CGFloat) {
+            let m = metrics.withColumnLabels(fontSize: 15, verticalPosition: position, growth: growth)
+            let dock = PanelGeometry.dockTargetFrame(contentLength: length, on: rightEdgeScreen, metrics: m, edge: .right)
+            let capsule = PanelGeometry.capsuleTargetFrame(forDock: dock, on: rightEdgeScreen, metrics: m, edge: .right)
+            return (dock.maxY - m.shadowPadding, capsule.minY + m.shadowPadding)
+        }
+        XCTAssertEqual(group(300, .down, at: 0.25).top, group(500, .down, at: 0.25).top, "downward: the top stays")
+        XCTAssertEqual(group(300, .up, at: 0.75).bottom, group(500, .up, at: 0.75).bottom, "upward: the bottom stays")
+        let short = group(300, .both, at: 0.5), long = group(500, .both, at: 0.5)
+        XCTAssertEqual((short.top + short.bottom) / 2, (long.top + long.bottom) / 2, accuracy: 0.001, "both: the middle stays")
+
+        // Too long to grow down from the anchor: pushed up just enough to fit.
+        let pushed = group(800, .down, at: 0.5)
+        XCTAssertEqual(pushed.bottom, metrics.outerMargin)
+    }
+
+    func testColumnWidthAdjustmentWidensTheLabelRoomWithAFloor() {
+        let base = metrics.withColumnLabels(fontSize: 15)
+        XCTAssertEqual(metrics.withColumnLabels(fontSize: 15, widthAdjustment: 100).columnWidth, base.columnWidth + 100)
+        XCTAssertEqual(metrics.withColumnLabels(fontSize: 15, widthAdjustment: -1000).columnLabelWidth,
+                       PanelLayoutMetrics.minimumColumnLabelWidth)
+    }
+
+    func testColumnWidthFollowsTheLabelSizeAndTheIconsSeparately() {
+        let native = DockPanelHeight.native.metrics
+        XCTAssertEqual(native.withColumnLabels(fontSize: 15).columnWidth, native.columnWidth,
+                       "the default label size keeps the original column")
+        XCTAssertEqual(native.withColumnLabels(fontSize: 30).columnWidth - native.columnWidth,
+                       PanelLayoutMetrics.columnLabelWidth(fontSize: 15), "doubling the text doubles its room")
+
+        let big = DockPanelHeight(clamping: 108).metrics
+        XCTAssertEqual(big.withColumnLabels(fontSize: 15).columnWidth - native.withColumnLabels(fontSize: 15).columnWidth,
+                       ChipPillMetrics.cardWidth + ChipPillMetrics.iconSpacing + 2 * PanelLayoutMetrics.columnInset,
+                       "doubling the bar grows only the icon part")
+    }
+
+    func testBottomEdgeOverloadsMatchTheOriginalGeometry() {
+        let screen = rightEdgeScreen
+        let dock = PanelGeometry.dockTargetFrame(contentLength: 620, on: screen, metrics: metrics, edge: .bottom)
+        XCTAssertEqual(dock, PanelGeometry.dockTargetFrame(contentWidth: 620, on: screen, metrics: metrics))
+        XCTAssertEqual(PanelGeometry.capsuleTargetFrame(forDock: dock, on: screen, metrics: metrics, edge: .bottom),
+                       PanelGeometry.capsuleTargetFrame(forDock: dock, on: screen, metrics: metrics))
+    }
+
+    func testSidePopupOpensLeftOfItsAnchorAndCentresOnIt() {
+        let anchor = CGRect(x: 1294, y: 243.5, width: 54, height: 54)
+        let frame = PanelGeometry.sidePopupTargetFrame(anchorVisibleRect: anchor, size: CGSize(width: 300, height: 400),
+                                                       on: rightEdgeScreen, metrics: metrics)
+        let m = StackPopupMetrics.self
+        let plate = CGRect(x: frame.minX + m.panelMargin, y: frame.minY + m.panelMargin + m.arrowHeight,
+                           width: frame.width - 2 * m.panelMargin,
+                           height: frame.height - 2 * m.panelMargin - m.arrowHeight)
+
+        XCTAssertEqual(frame.size, CGSize(width: 300, height: 400))
+        XCTAssertEqual(plate.maxX, anchor.minX - m.tipGap - m.arrowHeight)
+        XCTAssertEqual(plate.midY, anchor.midY)
+    }
+
+    func testSidePopupIsClampedUnderTheMenuBar() {
+        let anchor = CGRect(x: 1294, y: 903, width: 54, height: 54)
+        let frame = PanelGeometry.sidePopupTargetFrame(anchorVisibleRect: anchor, size: CGSize(width: 300, height: 400),
+                                                       on: rightEdgeScreen, metrics: metrics)
+        let plateTop = frame.maxY - StackPopupMetrics.panelMargin
+        XCTAssertEqual(plateTop, 949 - PanelGeometry.stackPopupTopGap)
+    }
+
+    func testSidePopupHeightIsCappedToTheScreen() {
+        let anchor = CGRect(x: 1294, y: 400, width: 54, height: 54)
+        let frame = PanelGeometry.sidePopupTargetFrame(anchorVisibleRect: anchor, size: CGSize(width: 300, height: 3000),
+                                                       on: rightEdgeScreen, metrics: metrics)
+        let m = StackPopupMetrics.self
+        XCTAssertEqual(frame.height - 2 * m.panelMargin - m.arrowHeight,
+                       PanelGeometry.sidePopupAvailablePlateHeight(on: rightEdgeScreen))
+        XCTAssertEqual(frame.minY + m.panelMargin + m.arrowHeight, PanelGeometry.stackPopupTopGap)
+    }
+
+    func testSideTooltipSitsLeftOfThePillVerticallyCentred() {
+        let pill = CGRect(x: 1300, y: 500, width: 150, height: 30)
+        let frame = PanelGeometry.windowTitleTooltipTargetFrame(anchorVisibleRect: pill, size: CGSize(width: 120, height: 40),
+                                                                tipGap: 6.5, on: rightEdgeScreen, edge: .right)
+        let inset = PanelGeometry.windowTitleTooltipShadowPadding
+        let bubble = frame.insetBy(dx: inset, dy: inset)
+        XCTAssertEqual(bubble.maxX, pill.minX - 6.5)
+        XCTAssertEqual(bubble.midY, pill.midY)
+    }
+
+    func testTaskbarEdgeCanonicalMapsAreIdentityOnTheBottomEdge() {
+        let point = CGPoint(x: 3, y: 7)
+        let rect = CGRect(x: 1, y: 2, width: 3, height: 4)
+        XCTAssertEqual(TaskbarEdge.bottom.stripCanonical(point), point)
+        XCTAssertEqual(TaskbarEdge.bottom.stripCanonical(rect), rect)
+        XCTAssertEqual(TaskbarEdge.bottom.screenCanonical(point), point)
+        XCTAssertEqual(TaskbarEdge.bottom.screenCanonical(rect), rect)
+    }
+
+    func testRightEdgeCanonicalMapsTurnTheColumnIntoARow() {
+        let edge = TaskbarEdge.right
+        // Strip space is y-down: top-to-bottom becomes left-to-right.
+        XCTAssertEqual(edge.stripCanonical(CGPoint(x: 3, y: 7)), CGPoint(x: 7, y: 3))
+        XCTAssertEqual(edge.stripCanonical(CGRect(x: 1, y: 2, width: 3, height: 4)), CGRect(x: 2, y: 1, width: 4, height: 3))
+        // Screen space is y-up: higher on screen comes first along the bar, and further left is
+        // further from the edge (larger canonical y, as "up" is for a bottom bar).
+        let higher = edge.screenCanonical(CGPoint(x: 1400, y: 500))
+        let lower = edge.screenCanonical(CGPoint(x: 1400, y: 100))
+        XCTAssertLessThan(higher.x, lower.x)
+        XCTAssertGreaterThan(edge.screenCanonical(CGPoint(x: 100, y: 0)).y, edge.screenCanonical(CGPoint(x: 200, y: 0)).y)
+        let rect = CGRect(x: 100, y: 200, width: 30, height: 40)
+        XCTAssertEqual(edge.screenCanonical(rect), CGRect(x: -240, y: -130, width: 40, height: 30))
+        XCTAssertTrue(edge.screenCanonical(rect).contains(edge.screenCanonical(CGPoint(x: 110, y: 230))))
     }
 
     private func layout(

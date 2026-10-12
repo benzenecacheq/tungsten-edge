@@ -42,7 +42,9 @@ enum FolderChipDropZone: Equatable {
 /// SwiftUI 手势回调。`stripScreenRect` 是任务条可见内容区屏幕 frame，不含 shadowPadding。
 struct FolderChipDropGeometry: Equatable {
     let stripScreenRect: CGRect
+    /// Along the bar, in its frame of reference (`TaskbarEdge.stripCanonical`).
     let folderZoneMinX: CGFloat
+    var edge: TaskbarEdge = .bottom
 
     func classify(screenPoint: CGPoint) -> FolderChipDropZone {
         guard stripScreenRect != .zero else { return .outsideStrip }
@@ -51,8 +53,8 @@ struct FolderChipDropGeometry: Equatable {
             y: stripScreenRect.maxY - screenPoint.y
         )
         return FolderChipDropZone.classify(
-            point: localPoint,
-            stripVisibleRect: CGRect(origin: .zero, size: stripScreenRect.size),
+            point: edge.stripCanonical(localPoint),
+            stripVisibleRect: edge.stripCanonical(CGRect(origin: .zero, size: stripScreenRect.size)),
             folderZoneMinX: folderZoneMinX
         )
     }

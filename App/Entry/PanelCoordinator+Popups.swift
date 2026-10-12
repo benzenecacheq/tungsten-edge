@@ -202,11 +202,12 @@ extension PanelCoordinator {
         let screen = panelCurrentScreen(panel: mainPanel)
         let screenGeometry = Self.screenGeometry(screen)
         let arrow = StackPopupArrowModel()
+        arrow.isHidden = taskbarEdge.isVertical
         let context = StackPopupContext(
             limits: StackGridLayout.limits(
                 screenSize: screenGeometry.frame.size,
                 availablePlateHeight: PanelGeometry.stackPopupAvailablePlateHeight(
-                    anchorVisibleRect: anchorVisibleRect, on: screenGeometry)),
+                    anchorVisibleRect: anchorVisibleRect, on: screenGeometry, edge: taskbarEdge)),
             arrow: arrow)
 
         let hosting = makeHosting(context)
@@ -236,8 +237,9 @@ extension PanelCoordinator {
         if sync.width >= 160, sync.height >= 100 {
             lastPopupSize = sync
         }
-        let initialFrame = PanelGeometry.folderPopupTargetFrame(
-            anchorVisibleRect: anchorVisibleRect, size: lastPopupSize, on: screenGeometry, metrics: layoutMetrics)
+        let initialFrame = PanelGeometry.stackPopupTargetFrame(
+            anchorVisibleRect: anchorVisibleRect, size: lastPopupSize, on: screenGeometry, metrics: layoutMetrics,
+            edge: taskbarEdge)
         lastPopupTargetFrame = initialFrame
 
         if isSwitching {
@@ -300,8 +302,9 @@ extension PanelCoordinator {
         }
         lastPopupSize = size
         let screen = panelCurrentScreen(panel: dock)
-        let target = PanelGeometry.folderPopupTargetFrame(
-            anchorVisibleRect: popupAnchorVisibleRect, size: size, on: Self.screenGeometry(screen), metrics: layoutMetrics)
+        let target = PanelGeometry.stackPopupTargetFrame(
+            anchorVisibleRect: popupAnchorVisibleRect, size: size, on: Self.screenGeometry(screen), metrics: layoutMetrics,
+            edge: taskbarEdge)
         lastPopupTargetFrame = target
 
         if folderPopupFrameTimer != nil {
@@ -353,6 +356,7 @@ extension PanelCoordinator {
             return
         }
         let screen = Self.screenGeometry(panelCurrentScreen(panel: dock))
+        let besideColumn = taskbarEdge.isVertical
 
         let ease = UnitBezierEase(timingFunction)
         let (w0, w1) = (start.width, target.width)
@@ -381,6 +385,16 @@ extension PanelCoordinator {
                     t.invalidate()
                 } else {
                     let p = ease.progress(at: raw)
+                    if besideColumn {
+                        // Beside a column both ends are already clamped and the plate re-centres on
+                        // its anchor at every size, so a straight tween between them stays on it.
+                        let frame = NSRect(x: start.minX + (target.minX - start.minX) * p,
+                                           y: start.minY + (target.minY - start.minY) * p,
+                                           width: w0 + (w1 - w0) * p,
+                                           height: h0 + (h1 - h0) * p)
+                        self.setFolderPopupFrame(frame, on: panel, display: true)
+                        return
+                    }
                     let width = w0 + (w1 - w0) * p
                     let height = h0 + (h1 - h0) * p
                     // 每帧用当前尺寸重走 PanelGeometry 的居中+钳位公式（与首帧/重定位同一真相）。

@@ -60,6 +60,7 @@ extension PanelCoordinator {
                 case .ended: self?.endInteractiveResize()
                 }
             },
+            onColumnWidthResize: { [weak self] event in self?.handleColumnWidthResize(event) },
             resizeGripController: resizeGripController,
             // 标签变长变短：开一段面板逐帧跟随内容宽度的窗口（见 `beginLabelWidthFollow`）。
             onLabelWidthChange: { [weak self] starting in self?.beginLabelWidthFollow(starting: starting) },

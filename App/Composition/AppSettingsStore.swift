@@ -69,6 +69,22 @@ enum HoverStyle: String, CaseIterable {
     }
 }
 
+/// What the Background Opacity setting does to the two layers under the cards. The original
+/// glass is nearly see-through by design (it matches the native Dock), so the setting cannot
+/// just scale it: up to `designed` it fades the glass in from nothing, and past it a solid plate
+/// in the system window colour fades in over the glass until the bar is opaque at 1.
+enum TaskbarBackgroundOpacity {
+    /// The setting that reproduces the original look: glass at full strength, no plate.
+    static let designed: Double = 0.3
+
+    /// Opacity of the glass backdrop and of the solid plate over it, for a setting in 0...1.
+    static func layers(for setting: Double) -> (glass: Double, plate: Double) {
+        let value = setting.isFinite ? min(max(setting, 0), 1) : designed
+        guard value > designed else { return (value / designed, 0) }
+        return (1, (value - designed) / (1 - designed))
+    }
+}
+
 /// 用户自定义的显隐任务条快捷键（nil = 默认 ⌥⇧⌘D）。
 /// `glyphs` 在录制那一刻由 NSEvent 的字符定格（理由见 `HotKeyGlyphs`），展示端只读它。
 struct StoredHotKeyShortcut: Equatable {
@@ -125,6 +141,34 @@ final class AppSettingsStore: ObservableObject {
     @Published private(set) var scrollReverserEnabled: Bool
     /// 任务条显示位置。默认 `.followMouse` = 现状（底边停留切屏）；`.pinned` 固定到某屏。
     @Published private(set) var taskbarScreenPlacement: TaskbarScreenPlacement
+    /// Which screen edge the bar hugs. Missing or unrecognised stored value = `bottom`.
+    @Published private(set) var taskbarEdge: TaskbarEdge
+    /// How opaque the bar's and the drawer capsule's background is: 0 = clear (only the cards
+    /// show), `TaskbarBackgroundOpacity.designed` = the original glass (the default), 1 = solid.
+    /// The cards, their text and the outline are not affected.
+    @Published private(set) var taskbarBackgroundOpacity: Double
+    /// Point size of the text beside each card in a side-edge column. Independent of the bar's
+    /// size (Taskbar Size scales only the icons). Whole points in `columnLabelFontSizeRange`.
+    @Published private(set) var columnLabelFontSize: Double
+
+    /// Points added to (or taken from) a column's label room, set by dragging the column's inner
+    /// edge. Whole points in `columnWidthAdjustmentRange`; the room never drops below
+    /// `PanelLayoutMetrics.minimumColumnLabelWidth`.
+    @Published private(set) var columnWidthAdjustment: Double
+    /// Where a side-edge column sits between the top (0) and the bottom (1) of the screen; 0.5 =
+    /// centred. Steps of 5%.
+    @Published private(set) var columnVerticalPosition: Double
+    /// Which end of a side-edge column stays at `columnVerticalPosition` as it changes length.
+    @Published private(set) var columnGrowth: ColumnGrowth
+
+    /// The bar's geometry: `dockPanelHeight`'s, with a column as wide as the label size and the
+    /// width adjustment ask for, placed at `columnVerticalPosition`.
+    var panelLayoutMetrics: PanelLayoutMetrics {
+        dockPanelHeight.metrics.withColumnLabels(fontSize: CGFloat(columnLabelFontSize),
+                                                 widthAdjustment: CGFloat(columnWidthAdjustment),
+                                                 verticalPosition: CGFloat(columnVerticalPosition),
+                                                 growth: columnGrowth)
+    }
     /// 这台机器上已经成功提交过邮箱订阅。只用来把设置里那段订阅区块收起来，
     /// 免得已经留过邮箱的人被同一段话反复看见。**不是**「是否为原始用户」的凭据——
     /// 那个凭据是 `InstallationRecord` 的首装时间戳，以及服务端那份名单。
@@ -219,6 +263,19 @@ final class AppSettingsStore: ObservableObject {
             // 降级不毁掉用户在新版本里做的选择。
             taskbarScreenPlacement = .followMouse
         }
+        // Read only, never written back here: an unknown value from a newer version stays put.
+        taskbarEdge = TaskbarEdge(rawValue: defaults.string(forKey: Keys.taskbarEdge) ?? "") ?? .default
+        columnLabelFontSize = Self.clampedColumnLabelFontSize(
+            Self.storedNumericValue(defaults.object(forKey: Keys.columnLabelFontSize)) ?? Self.defaultColumnLabelFontSize)
+        columnWidthAdjustment = Self.clampedColumnWidthAdjustment(
+            Self.storedNumericValue(defaults.object(forKey: Keys.columnWidthAdjustment)) ?? 0)
+        columnVerticalPosition = Self.clampedColumnVerticalPosition(
+            Self.storedNumericValue(defaults.object(forKey: Keys.columnVerticalPosition)) ?? 0.5)
+        columnGrowth = ColumnGrowth(rawValue: defaults.string(forKey: Keys.columnGrowth) ?? "") ?? .default
+        // Missing or not a finite number = the original glass, the look before the setting existed.
+        taskbarBackgroundOpacity = Self.clampedBackgroundOpacity(
+            Self.storedNumericValue(defaults.object(forKey: Keys.taskbarBackgroundOpacity))
+                ?? TaskbarBackgroundOpacity.designed)
         // Bar height: the new key wins; a user upgrading from the four-tier releases carries only
         // the legacy `dockSize` string, which is mapped once (the legacy key is read here and
         // never written or removed, so a rollback still finds it). Corrupt values fall back to
@@ -295,6 +352,74 @@ final class AppSettingsStore: ObservableObject {
         guard scrollReverserEnabled != value else { return }
         scrollReverserEnabled = value
         defaults.set(value, forKey: Keys.scrollReverserEnabled)
+    }
+
+    /// Steps of 5%, so the menu slider's readout and the stored value agree.
+    static func clampedBackgroundOpacity(_ value: Double) -> Double {
+        guard value.isFinite else { return TaskbarBackgroundOpacity.designed }
+        return min(max((value * 20).rounded() / 20, 0), 1)
+    }
+
+    static let columnLabelFontSizeRange: ClosedRange<Double> = 10...22
+    /// A notch above the 12pt titled cards use on the bottom bar: a column has room to spare.
+    static let defaultColumnLabelFontSize: Double = 15
+
+    static func clampedColumnLabelFontSize(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultColumnLabelFontSize }
+        return min(max(value.rounded(), columnLabelFontSizeRange.lowerBound), columnLabelFontSizeRange.upperBound)
+    }
+
+    static let columnWidthAdjustmentRange: ClosedRange<Double> = -150...1000
+
+    static func clampedColumnWidthAdjustment(_ value: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return min(max(value.rounded(), columnWidthAdjustmentRange.lowerBound), columnWidthAdjustmentRange.upperBound)
+    }
+
+    func setColumnWidthAdjustment(_ value: Double) {
+        let clamped = Self.clampedColumnWidthAdjustment(value)
+        guard columnWidthAdjustment != clamped else { return }
+        columnWidthAdjustment = clamped
+        defaults.set(clamped, forKey: Keys.columnWidthAdjustment)
+    }
+
+    /// Steps of 5%, so the menu slider's readout and the stored value agree.
+    static func clampedColumnVerticalPosition(_ value: Double) -> Double {
+        guard value.isFinite else { return 0.5 }
+        return min(max((value * 20).rounded() / 20, 0), 1)
+    }
+
+    func setColumnVerticalPosition(_ value: Double) {
+        let clamped = Self.clampedColumnVerticalPosition(value)
+        guard columnVerticalPosition != clamped else { return }
+        columnVerticalPosition = clamped
+        defaults.set(clamped, forKey: Keys.columnVerticalPosition)
+    }
+
+    func setColumnGrowth(_ value: ColumnGrowth) {
+        guard columnGrowth != value else { return }
+        columnGrowth = value
+        defaults.set(value.rawValue, forKey: Keys.columnGrowth)
+    }
+
+    func setColumnLabelFontSize(_ value: Double) {
+        let clamped = Self.clampedColumnLabelFontSize(value)
+        guard columnLabelFontSize != clamped else { return }
+        columnLabelFontSize = clamped
+        defaults.set(clamped, forKey: Keys.columnLabelFontSize)
+    }
+
+    func setTaskbarBackgroundOpacity(_ value: Double) {
+        let clamped = Self.clampedBackgroundOpacity(value)
+        guard taskbarBackgroundOpacity != clamped else { return }
+        taskbarBackgroundOpacity = clamped
+        defaults.set(clamped, forKey: Keys.taskbarBackgroundOpacity)
+    }
+
+    func setTaskbarEdge(_ value: TaskbarEdge) {
+        guard taskbarEdge != value else { return }
+        taskbarEdge = value
+        defaults.set(value.rawValue, forKey: Keys.taskbarEdge)
     }
 
     func setTaskbarScreenPlacement(_ value: TaskbarScreenPlacement) {
@@ -557,6 +682,12 @@ private enum Keys {
     /// ⚠️ 旧的 `com.tungsten.edge.displayMode`（早期「单屏/多屏」档，已随功能删除）是孤儿键，
     /// **永不再读**（`Docs/05`）——新功能只认下面这两个键。
     static let taskbarScreenMode = "com.tungsten.edge.taskbarScreen.mode"
+    static let taskbarEdge = "com.tungsten.edge.taskbarEdge"
+    static let taskbarBackgroundOpacity = "com.tungsten.edge.taskbarBackgroundOpacity"
+    static let columnLabelFontSize = "com.tungsten.edge.columnLabelFontSize"
+    static let columnWidthAdjustment = "com.tungsten.edge.columnWidthAdjustment"
+    static let columnVerticalPosition = "com.tungsten.edge.columnVerticalPosition"
+    static let columnGrowth = "com.tungsten.edge.columnGrowth"
     /// 固定屏身份（字典：uuid / name）。切回 followMouse 时保留不删。
     static let taskbarScreenPinned = "com.tungsten.edge.taskbarScreen.pinned"
     /// A fresh install waiting to first see multiple displays. Missing key = existing user,

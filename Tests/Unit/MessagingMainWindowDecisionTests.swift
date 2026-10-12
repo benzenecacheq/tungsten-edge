@@ -105,4 +105,40 @@ final class MessagingMainWindowDecisionTests: XCTestCase {
         )
         XCTAssertEqual(id, "n")
     }
+
+    // MARK: - tileWindowID
+
+    func testTileTakesTheMainWindowWhenThereIsOne() {
+        let id = MessagingMainWindowDecision.tileWindowID(
+            bundleID: "com.example.chat",
+            windows: [W(id: "a", title: "Alice"), W(id: "main", title: "Chat")],
+            titleMatchesAppName: { $0 == "Chat" }
+        )
+        XCTAssertEqual(id, "main")
+    }
+
+    func testTileTakesTheFirstWindowWhenNoneIsMain() {
+        let id = MessagingMainWindowDecision.tileWindowID(
+            bundleID: "com.example.chat",
+            windows: [W(id: "a", title: "Alice"), W(id: "b", title: "Bob")],
+            titleMatchesAppName: { _ in false }
+        )
+        XCTAssertEqual(id, "a")
+    }
+
+    func testTileSkipsExcludedWindows() {
+        XCTAssertNil(MessagingMainWindowDecision.tileWindowID(
+            bundleID: wechat, windows: [W(id: "notes", title: "笔记")], titleMatchesAppName: { _ in false }))
+        let id = MessagingMainWindowDecision.tileWindowID(
+            bundleID: wechat,
+            windows: [W(id: "notes", title: "笔记"), W(id: "a", title: "Alice"), W(id: "b", title: "Bob")],
+            titleMatchesAppName: { _ in false }
+        )
+        XCTAssertEqual(id, "a")
+    }
+
+    func testTileWithNoWindowsIsNil() {
+        XCTAssertNil(MessagingMainWindowDecision.tileWindowID(
+            bundleID: telegram, windows: [], titleMatchesAppName: { _ in true }))
+    }
 }

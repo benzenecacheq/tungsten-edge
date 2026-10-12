@@ -142,10 +142,11 @@ final class WheelScrollInterceptorView: NSView {
 extension View {
     /// macOS 14 的 `defaultScrollAnchor(.leading)` 在更老系统上不可用；横向 ScrollView 本来就从
     /// 前缘开始，所以旧系统走默认即可（仅 14+ 显式锚定，保持原行为）。
+    /// `vertical`: a column starts at its top instead.
     @ViewBuilder
-    func compatLeadingScrollAnchor() -> some View {
+    func compatLeadingScrollAnchor(vertical: Bool = false) -> some View {
         if #available(macOS 14.0, *) {
-            self.defaultScrollAnchor(.leading)
+            self.defaultScrollAnchor(vertical ? .top : .leading)
         } else {
             self
         }

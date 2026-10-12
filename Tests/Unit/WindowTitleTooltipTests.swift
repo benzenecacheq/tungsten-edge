@@ -375,7 +375,7 @@ final class ScreenRectReaderTests: XCTestCase {
     func testBubbleRemeasuresInTheSameTurnWhenTheTitleChanges() {
         for scheme in [ColorScheme.light, .dark] {
             func bubble(_ title: String) -> AnyView {
-                AnyView(WindowTitleTooltipView(title: title, style: .native, usesLiquidGlass: false)
+                AnyView(WindowTitleTooltipView(title: title, style: .native, usesLiquidGlass: false, pointsDown: true)
                     .environment(\.colorScheme, scheme))
             }
             let host = NSHostingView(rootView: bubble("Notes"))

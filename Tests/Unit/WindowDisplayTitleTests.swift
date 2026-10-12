@@ -109,4 +109,44 @@ final class WindowDisplayTitleTests: XCTestCase {
             "local-dc02 - Google Chrome"
         )
     }
+
+    // MARK: Column labels (right-edge bar)
+
+    func testColumnLabelIsAppNameDashTitle() {
+        XCTAssertEqual(WindowDisplayTitle.columnLabel(appName: "Safari", rawTitle: "Apple – Start Page"),
+                       "Safari — Apple – Start Page")
+    }
+
+    func testColumnLabelDropsALeadingAppNameInAnyCase() {
+        XCTAssertEqual(WindowDisplayTitle.columnLabel(appName: "Terminal", rawTitle: "terminal — zsh — 80×24"),
+                       "Terminal — zsh — 80×24")
+        XCTAssertEqual(WindowDisplayTitle.columnLabel(appName: "Mail", rawTitle: "MAIL: Inbox"), "Mail — Inbox")
+    }
+
+    func testColumnLabelDropsATrailingAppName() {
+        XCTAssertEqual(WindowDisplayTitle.columnLabel(appName: "Google Chrome", rawTitle: "local-dc02 - Google Chrome"),
+                       "Google Chrome — local-dc02")
+    }
+
+    func testColumnLabelIsJustTheAppNameWhenTheTitleAddsNothing() {
+        for title in [nil, "", "  ", "Notes", "notes", "Notes —"] as [String?] {
+            XCTAssertEqual(WindowDisplayTitle.columnLabel(appName: "Notes", rawTitle: title), "Notes")
+            XCTAssertEqual(WindowDisplayTitle.columnBubble(appName: "Notes", rawTitle: title), "Notes")
+        }
+    }
+
+    func testColumnLabelKeepsATitleThatOnlyContainsTheAppNameLater() {
+        XCTAssertEqual(WindowDisplayTitle.columnLabel(appName: "Mail", rawTitle: "Re: Mail server down"),
+                       "Mail — Re: Mail server down")
+    }
+
+    func testColumnLabelOnlyDropsTheAppNameAsAWholeWord() {
+        XCTAssertEqual(WindowDisplayTitle.columnLabel(appName: "Mail", rawTitle: "Mailbox report"),
+                       "Mail — Mailbox report")
+    }
+
+    func testColumnBubblePutsTheLabelsHalvesOnTwoLines() {
+        XCTAssertEqual(WindowDisplayTitle.columnBubble(appName: "Terminal", rawTitle: "Terminal — zsh — 80×24"),
+                       "Terminal\nzsh — 80×24")
+    }
 }

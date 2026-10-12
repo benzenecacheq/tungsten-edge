@@ -76,6 +76,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     /// 显示前（`prepareMenuForPresentation`）建好。
     private let taskbarScreenMenu = NSMenu()
     /// 下面四条是普通勾选项，**恒在**（菜单开着时不许增删行），勾选状态由 refreshCheckmarks 落。
+    /// Taskbar Position ▸ Bottom / Right (`TaskbarEdge`).
+    private let taskbarEdgeItem = NSMenuItem(title: String(localized: "Taskbar Position"), action: nil, keyEquivalent: "")
+    private let taskbarEdgeMenu = NSMenu()
+    private let columnGrowthItem = NSMenuItem(title: String(localized: "Bar Grows"), action: nil, keyEquivalent: "")
+    private let columnGrowthMenu = NSMenu()
     private let showShelfItem = NSMenuItem(title: String(localized: "Show Shelf"), action: #selector(toggleShowShelf), keyEquivalent: "")
     private let showTrashItem = NSMenuItem(title: String(localized: "Show Trash"), action: #selector(toggleShowTrash), keyEquivalent: "")
     private let hoverNameItem = NSMenuItem(title: String(localized: "Show app name on hover"), action: #selector(toggleHoverName), keyEquivalent: "")
@@ -85,6 +90,28 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     /// Hat and row of the taskbar height slider; the same value as the grip on the bar.
     private let taskbarSizeSectionItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let taskbarSizeSliderView = TaskbarSizeMenuItemView(accessibilityTitle: String(localized: "Taskbar Size"))
+    private let backgroundOpacitySectionItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let backgroundOpacitySliderView = ValueSliderMenuItemView(
+        accessibilityTitle: String(localized: "Background Opacity"), range: 0...1,
+        snap: AppSettingsStore.clampedBackgroundOpacity,
+        format: { "\(Int(($0 * 100).rounded()))%" })
+    private let labelSizeSectionItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let labelSizeSliderView = ValueSliderMenuItemView(
+        accessibilityTitle: String(localized: "Label Size"), range: AppSettingsStore.columnLabelFontSizeRange,
+        snap: AppSettingsStore.clampedColumnLabelFontSize,
+        format: { "\(Int($0))" })
+    private let verticalPositionSectionItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let verticalPositionSliderView = ValueSliderMenuItemView(
+        accessibilityTitle: String(localized: "Vertical Position"), range: 0...1,
+        snap: AppSettingsStore.clampedColumnVerticalPosition,
+        format: { value in
+            switch value {
+            case 0: return String(localized: "Top")
+            case 0.5: return String(localized: "Center")
+            case 1: return String(localized: "Bottom")
+            default: return "\(Int((value * 100).rounded()))%"
+            }
+        })
 
     init(store: AppSettingsStore,
          settingsCoordinator: SettingsCoordinator,
@@ -222,6 +249,39 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let taskbarSizeItem = NSMenuItem()
         taskbarSizeItem.view = taskbarSizeSliderView
         menu.addItem(taskbarSizeItem)
+
+        // Live on both entry points too: only the background fades, the bar never moves.
+        backgroundOpacitySectionItem.attributedTitle = Self.sectionTitle(String(localized: "Background Opacity"))
+        backgroundOpacitySectionItem.isEnabled = false
+        menu.addItem(backgroundOpacitySectionItem)
+        backgroundOpacitySliderView.onValueChange = { [weak store] opacity in
+            store?.setTaskbarBackgroundOpacity(opacity)
+        }
+        let backgroundOpacityItem = NSMenuItem()
+        backgroundOpacityItem.view = backgroundOpacitySliderView
+        menu.addItem(backgroundOpacityItem)
+
+        // Text beside the cards of a side-edge column; the bottom bar has no such labels.
+        labelSizeSectionItem.attributedTitle = Self.sectionTitle(String(localized: "Label Size"))
+        labelSizeSectionItem.isEnabled = false
+        menu.addItem(labelSizeSectionItem)
+        labelSizeSliderView.onValueChange = { [weak store] size in
+            store?.setColumnLabelFontSize(size)
+        }
+        let labelSizeItem = NSMenuItem()
+        labelSizeItem.view = labelSizeSliderView
+        menu.addItem(labelSizeItem)
+
+        // Where a side-edge column sits, top to bottom.
+        verticalPositionSectionItem.attributedTitle = Self.sectionTitle(String(localized: "Vertical Position"))
+        verticalPositionSectionItem.isEnabled = false
+        menu.addItem(verticalPositionSectionItem)
+        verticalPositionSliderView.onValueChange = { [weak store] position in
+            store?.setColumnVerticalPosition(position)
+        }
+        let verticalPositionItem = NSMenuItem()
+        verticalPositionItem.view = verticalPositionSliderView
+        menu.addItem(verticalPositionItem)
         menu.addItem(.separator())
 
         nativeDockSectionItem.attributedTitle = Self.sectionTitle(AutoHideToggleMenuModel.nativeDockSectionTitle)
@@ -256,6 +316,24 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         // 一旦混进与任务条无关的行，读者就只能靠文案自己猜它归谁管了。
         // `taskbarScreenItem` 的显隐仍只在 `prepareMenuForPresentation` 翻转
         //（菜单在屏时增删行会让任务条弹出路径的锚点漂移）。
+        for edge in TaskbarEdge.allCases {
+            let item = NSMenuItem(title: edge.displayName, action: #selector(selectTaskbarEdge(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = edge.rawValue
+            taskbarEdgeMenu.addItem(item)
+        }
+        taskbarEdgeItem.submenu = taskbarEdgeMenu
+        menu.addItem(taskbarEdgeItem)
+        // Which end of a right-edge column stays put (see Vertical Position).
+        for growth in ColumnGrowth.allCases {
+            let item = NSMenuItem(title: growth.displayName, action: #selector(selectColumnGrowth(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = growth.rawValue
+            columnGrowthMenu.addItem(item)
+        }
+        columnGrowthItem.submenu = columnGrowthMenu
+        menu.addItem(columnGrowthItem)
+
         taskbarScreenItem.submenu = taskbarScreenMenu
         taskbarScreenItem.isHidden = true
         menu.addItem(taskbarScreenItem)
@@ -371,6 +449,9 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         nativeDockApplyItem.isHidden = true
         edgeSliderView.sync(delay: store.edgeAutoHideDelay)
         taskbarSizeSliderView.sync(height: store.dockPanelHeight)
+        backgroundOpacitySliderView.sync(value: store.taskbarBackgroundOpacity)
+        labelSizeSliderView.sync(value: store.columnLabelFontSize)
+        verticalPositionSliderView.sync(value: store.columnVerticalPosition)
         refreshEdgeSectionTitle()
         rebuildTaskbarScreenMenu()
     }
@@ -495,6 +576,12 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     /// 钨极组四项的勾选。**只改 `state`，不增删行也不翻 `isHidden`**，
     /// 所以菜单开着时调用也安全（不受 `allowsLayoutChange` 约束）。
     private func refreshTaskbarPreferenceStates() {
+        for item in taskbarEdgeMenu.items {
+            item.state = item.representedObject as? String == store.taskbarEdge.rawValue ? .on : .off
+        }
+        for item in columnGrowthMenu.items {
+            item.state = item.representedObject as? String == store.columnGrowth.rawValue ? .on : .off
+        }
         showShelfItem.state = store.showShelf ? .on : .off
         showTrashItem.state = store.showTrash ? .on : .off
         hoverNameItem.state = store.hoverStyle.isExpressive ? .on : .off
@@ -688,6 +775,18 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
                 ?? ""
             store.setTaskbarScreenPlacement(.pinned(PinnedScreenSelection(uuid: uuid, name: name)))
         }
+    }
+
+    @objc private func selectTaskbarEdge(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let edge = TaskbarEdge(rawValue: raw) else { return }
+        store.setTaskbarEdge(edge)
+        refreshCheckmarks()
+    }
+
+    @objc private func selectColumnGrowth(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let growth = ColumnGrowth(rawValue: raw) else { return }
+        store.setColumnGrowth(growth)
+        refreshCheckmarks()
     }
 
     @objc private func toggleShowShelf() {

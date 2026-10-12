@@ -37,7 +37,7 @@ struct DockStripView: View {
 
     /// 当前尺寸档位派生的面板几何与缩放系数。**条内不写裸尺寸数字**——凡是随任务条一起
     /// 放大缩小的值都乘 `dockScale`；发丝线（分隔线宽、描边）保持 1pt 不缩。
-    private var metrics: PanelLayoutMetrics { settingsStore.dockPanelHeight.metrics }
+    private var metrics: PanelLayoutMetrics { settingsStore.panelLayoutMetrics }
     var dockScale: CGFloat { settingsStore.dockPanelHeight.scale }
     /// 任务条圆角。**玻璃态与毛玻璃态同一个值** —— 几何只有 `DockPanelHeight.metrics` /
     /// `DockShape` 一个来源，换底板材质不改尺寸（否则高度缩放失效，`scale` 的定义
@@ -46,6 +46,55 @@ struct DockStripView: View {
     /// 悬停效果档位。条内每个 chip 都显式接收它（同 `dockScale`，漏传是编译错误）；
     /// 抽屉面板与抽屉入口胶囊有意不受它影响（owner 2026-08-02）。
     var hoverStyle: HoverStyle { settingsStore.hoverStyle }
+    /// The glass and solid-plate strengths for the Background Opacity setting.
+    private var backgroundLayers: (glass: Double, plate: Double) {
+        TaskbarBackgroundOpacity.layers(for: settingsStore.taskbarBackgroundOpacity)
+    }
+    /// The screen edge the bar hugs. On a side edge the same entries stack top to bottom in a
+    /// column `metrics.columnWidth` wide.
+    var taskbarEdge: TaskbarEdge { settingsStore.taskbarEdge }
+
+    // MARK: Bar-axis geometry
+    //
+    // Every hit test on the bar — hover owner, right-click and grip zones, reorder halves, drop
+    // routing, block landing — was written for a horizontal bar: it compares x only and relies on
+    // each card filling the bar's height. In a column the cards are narrower than the bar, so
+    // each test is fed the bar's geometry instead: a card's band widened to the bar's full width,
+    // then mapped into the horizontal frame of reference (`TaskbarEdge.stripCanonical`). On the
+    // bottom edge all of these are the identity.
+
+    /// A strip-space card frame as the bar's hit tests see it. `.zero` (not measured yet) stays
+    /// `.zero`: several callers use it as that sentinel.
+    func barFrame(_ frame: CGRect) -> CGRect {
+        guard taskbarEdge.isVertical, frame != .zero else { return frame }
+        let band = CGRect(x: 0, y: frame.minY,
+                          width: max(frame.maxX, stripRootScreenRect.width), height: frame.height)
+        return taskbarEdge.stripCanonical(band)
+    }
+
+    func barFrames(_ frames: [String: CGRect]) -> [String: CGRect] {
+        taskbarEdge.isVertical ? frames.mapValues(barFrame) : frames
+    }
+
+    /// A strip-space point as the bar's hit tests see it.
+    func barPoint(_ point: CGPoint) -> CGPoint { taskbarEdge.stripCanonical(point) }
+
+    /// The strip's own bounds as the bar's hit tests see them.
+    var barBounds: CGRect {
+        taskbarEdge.stripCanonical(CGRect(origin: .zero, size: stripRootScreenRect.size))
+    }
+
+    /// The bar's length, along whichever axis it runs.
+    var barLength: CGFloat {
+        taskbarEdge.isVertical ? stripRootScreenRect.height : stripRootScreenRect.width
+    }
+
+    /// One card's extent along the bar, at this height: an icon card's width across a horizontal
+    /// bar, its height down a column. For gaps the bar opens where a card will land.
+    var cardExtentAlongBar: CGFloat {
+        (taskbarEdge.isVertical ? ChipPillMetrics.chipHeight : ChipPillMetrics.cardWidth) * dockScale
+    }
+
     @EnvironmentObject var keptAppStore: KeptAppStore
     @EnvironmentObject var runningApplicationStore: RunningApplicationStore
     @EnvironmentObject var appMembershipController: AppMembershipController
@@ -73,6 +122,8 @@ struct DockStripView: View {
     /// bar has no divider — `StripContextMenuZone.gripClaims`). `PanelCoordinator` injects both; the defaults are the
     /// correct omission for a strip with no panel behind it (the drag-carrier snapshot).
     var onInteractiveResize: (StripResizeGripEvent) -> Void = { _ in }
+    /// Drag on a column's inner (left) edge to widen or narrow it (`columnWidthGripClaims`).
+    var onColumnWidthResize: (StripResizeGripEvent) -> Void = { _ in }
     var resizeGripController: StripResizeGripController? = nil
     /// 标签变长变短那一轮 SwiftUI 更新里通知面板开跟随窗，附上这次开始动的每个标签盒的**起始宽**
     /// （`[chipID: 旧标签盒宽]`，pt）；之后每帧的实时宽由 `onLabelBoxWidthTick` 报，面板据此算内容总宽
@@ -191,6 +242,13 @@ struct DockStripView: View {
                               cornerRadius: taskbarCornerRadius,
                               usesLiquidGlass: usesLiquidGlass,
                               matchesDockRefraction: true)
+                // Settings → background opacity (`TaskbarBackgroundOpacity`). On Liquid Glass the
+                // coordinator fades the glass window behind the bar to match
+                // (`applyTaskbarBackgroundOpacity`).
+                .opacity(backgroundLayers.glass)
+            RoundedRectangle(cornerRadius: taskbarCornerRadius, style: .continuous)
+                .fill(Color(nsColor: .windowBackgroundColor))
+                .opacity(backgroundLayers.plate)
 
             // 玻璃厚度感：材质之上、内容之下。**默认关**，`DOCK_PANEL_THICKNESS=1` 才开
             //（未验收的效果一律 opt-in，见 DockEffectSwitches）。深色则两层保险都不画，
@@ -198,17 +256,21 @@ struct DockStripView: View {
             // 原生玻璃有真的边缘处理，这层「假厚度」叠上去没有意义，玻璃态一律不画。
             if theme.drawsEffectiveThickness && !usesLiquidGlass {
                 theme.panelThicknessLayer(cornerRadius: taskbarCornerRadius)
+                    .opacity(backgroundLayers.glass)
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .center, spacing: Style.chipSpacing * dockScale) {
+            ScrollView(taskbarEdge.isVertical ? .vertical : .horizontal, showsIndicators: false) {
+                stripStack {
                     ForEach(projection.entries) { entry in
                         chipWithReorder(entry, projection: projection)
                             .transition(.scale(scale: 0.88).combined(with: .opacity))
                     }
                 }
-                .padding(.horizontal, Style.chipContentInset * dockScale)
-                .frame(height: metrics.panelHeight)
+                .padding(taskbarEdge.isVertical ? .vertical : .horizontal, Style.chipContentInset * dockScale)
+                .padding(.horizontal, taskbarEdge.isVertical ? PanelLayoutMetrics.columnInset * dockScale : 0)
+                .frame(width: taskbarEdge.isVertical ? metrics.columnWidth : nil,
+                       height: taskbarEdge.isVertical ? nil : metrics.panelHeight,
+                       alignment: .leading)
                 .animation(frames.renderedCollapsed != dragController.stripSlotCollapsed
                                ? .easeInOut(duration: DrawerAnimation.duration)          // 合拢 / 重开：跟面板走
                                : .spring(response: 0.28, dampingFraction: 0.82),         // 让位：签收过的弹簧
@@ -234,19 +296,14 @@ struct DockStripView: View {
                 .environment(\.chipPillUsesGlass, usesLiquidGlass)
             }
             .clipShape(RoundedRectangle(cornerRadius: taskbarCornerRadius, style: .continuous))
-            .compatLeadingScrollAnchor()
-            .mask(alignment: .center) {
-                HStack(spacing: 0) {
-                    LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                        .frame(width: Style.edgeFadeWidth * dockScale)
-                    Color.black
-                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                        .frame(width: Style.edgeFadeWidth * dockScale)
-                }
-            }
+            .compatLeadingScrollAnchor(vertical: taskbarEdge.isVertical)
+            .mask(alignment: .center) { stripEdgeFade }
             .overlay(alignment: .topLeading) {
-                WheelScrollInterceptorRepresentable()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // A mouse wheel already scrolls a column; the interceptor only turns it sideways.
+                if !taskbarEdge.isVertical {
+                    WheelScrollInterceptorRepresentable()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
             // 右键任务条底板弹钨极菜单。
             //
@@ -269,6 +326,17 @@ struct DockStripView: View {
                 onEvent: onInteractiveResize,
                 controller: resizeGripController
             ))
+            // A column's inner edge drags its width. Above the height grip, which can claim the
+            // same spot inside a divider gap.
+            .overlay(Group {
+                if taskbarEdge.isVertical {
+                    StripResizeGripHost(
+                        shouldClaim: { columnWidthGripClaims(atScreen: $0) },
+                        onEvent: onColumnWidthResize,
+                        controller: nil
+                    )
+                }
+            })
             .overlay(NativeMenuHost(
                 popUpHandler: onRequestTaskbarMenu,
                 shouldClaim: { taskbarMenuZoneClaims(atScreen: $0) }
@@ -286,7 +354,8 @@ struct DockStripView: View {
         // `.coordinateSpace(name: "strip")` 之前**：坐标空间视图的宽度因此在整段悬停里恒定，
         // `chipFrames` 与 `onDrop` 的落点仍然同源，挂载层一个字没动。
         // `nil` 时不套任何 frame——平时完全按自然宽度走，非拖放路径零影响。
-        .frame(width: frozenStripWidth)
+        .frame(width: taskbarEdge.isVertical ? nil : frozenStripWidth,
+               height: taskbarEdge.isVertical ? frozenStripWidth : nil)
         // 跨面板后，被拖的卡片改由 DragController 的全屏载体面板绘制（不再画在任务条 overlay 上 —
         // 任务条窗口只有 92pt 高，自绘 overlay 会被裁掉，飘不出去）。这里只保留"让出空位"的原位隐藏。
         .coordinateSpace(name: "strip")
@@ -298,9 +367,11 @@ struct DockStripView: View {
             // 旧帧不会被清掉，只看帧的话落在原位置仍会误判成暂存。
             // Read at routing time, never copied here: the body no longer re-runs when the frames
             // move (`StripFrameBox`), so a value captured now would route a later drop by stale geometry.
-            shelfFrame: { [frames, showShelf = settingsStore.showShelf] in showShelf ? frames.shelfFrame : nil },
-            trashFrame: { [frames, showTrash = settingsStore.showTrash] in showTrash ? frames.trashFrame : nil },
-            folderFrames: { [frames] in frames.folderChipFrames },
+            // Mapped onto the bar's axis when read (`barFrame`); the delegate maps the drop location.
+            edge: taskbarEdge,
+            shelfFrame: { [frames, showShelf = settingsStore.showShelf] in showShelf ? barFrame(frames.shelfFrame) : nil },
+            trashFrame: { [frames, showTrash = settingsStore.showTrash] in showTrash ? barFrame(frames.trashFrame) : nil },
+            folderFrames: { [frames] in barFrames(frames.folderChipFrames) },
             orderedPaths: pinnedFolderStore.folderPaths,
             // chip 间距随档位缩放，「插到最前面」那段 slack 也得跟着缩，否则小档时它相对更宽、
             // 会吃掉首个文件夹左半边的移入区。
@@ -309,18 +380,18 @@ struct DockStripView: View {
                 guard ghost.zone == .folder else { return nil }
                 return StripDropRouting.OpenFolderGap(
                     insertIndex: ghost.insertIndex,
-                    width: (ChipPillMetrics.cardWidth + Style.chipSpacing) * dockScale)
+                    width: cardExtentAlongBar + Style.chipSpacing * dockScale)
             },
             onHoverBegan: { externalDropHoverBegan($0) },
             onHoverMoved: { externalDropHoverMoved($0) },
             onHoverEnded: { isLanding in externalDropHoverEnded(isLanding: isLanding) },
             onCommit: { target, urls in handleExternalDrop(target, urls: urls) },
             onCommitApplications: { urls, location in
-                handleExternalApplicationDrop(urls, atX: location.x)
+                handleExternalApplicationDrop(urls, atX: barPoint(location).x)
             },
             onGhostMoved: { target, bundleID, pinsFolder, location in
                 updateExternalDropGhost(target: target, bundleID: bundleID,
-                                        pinsFolder: pinsFolder, atX: location.x)
+                                        pinsFolder: pinsFolder, atX: barPoint(location).x)
             },
             currentGhostIndex: { externalDropGhost?.insertIndex },
             currentFrozenWidth: { frozenStripWidth },
@@ -499,7 +570,8 @@ struct DockStripView: View {
     /// hit-test 只查 folderChipFrames——绝不查 chipFrames）。
     private func folderReorderTarget(at point: CGPoint, dragging path: String) {
         let draggedID = "folder-" + path
-        guard let hit = folderChipFrames.first(where: { kv in
+        let point = barPoint(point)
+        guard let hit = barFrames(folderChipFrames).first(where: { kv in
             kv.key != draggedID && kv.value.contains(point)
         }) else { return }
         let targetPath = String(hit.key.dropFirst("folder-".count))
@@ -516,10 +588,10 @@ struct DockStripView: View {
     /// 调用方遇到 nil 直接不装 geometry。
     private var folderZoneMinX: CGFloat? {
         FolderChipDropZone.zoneMinX(
-            folderMinX: folderChipFrames.values.map(\.minX).min(),
+            folderMinX: barFrames(folderChipFrames).values.map(\.minX).min(),
             draggedSlotCollapsed: ownsActiveDrag && dragController.stripSlotCollapsed,
-            trashMinX: settingsStore.showTrash && trashFrame != .zero ? trashFrame.minX : nil,
-            stripWidth: stripRootScreenRect.width)
+            trashMinX: settingsStore.showTrash && trashFrame != .zero ? barFrame(trashFrame).minX : nil,
+            stripWidth: barLength)
     }
 
     /// 文件夹 chip 拖动中的实时落点分类,写进 DragController 供载体视图（跨 SwiftUI 树）读取做淡出。
@@ -535,7 +607,8 @@ struct DockStripView: View {
             return
         }
         let geometry = FolderChipDropGeometry(stripScreenRect: stripRootScreenRect,
-                                              folderZoneMinX: folderZoneMinX)
+                                              folderZoneMinX: folderZoneMinX,
+                                              edge: taskbarEdge)
         dragController.setFolderDropGeometry(geometry)
         dragController.setFolderDragZone(geometry.classify(screenPoint: dragController.globalLocation))
     }
@@ -580,9 +653,12 @@ struct DockStripView: View {
     /// (excluding the dragged chip itself), and place the dragged chip on the half the finger is
     /// in. Drives the existing `stripLayoutKeys` spring so the others slide aside as the gap moves.
     /// 全帧命中（不只看 x）：手指抬向胶囊/抽屉时 y 已离开条内行，contains 不命中 → 不误改顺序（Codex 二审）。
-    private func reorderTarget(at point: CGPoint, dragging id: String, current: [String]) {
-        guard let hit = chipFrames.first(where: { kv in
-            kv.key != id && kv.value.contains(point)
+    private func reorderTarget(at point: CGPoint, dragging id: String, current: [String],
+                               pinned: Set<String>) {
+        guard !pinned.contains(id) else { return }
+        let point = barPoint(point)
+        guard let hit = barFrames(chipFrames).first(where: { kv in
+            kv.key != id && !pinned.contains(kv.key) && kv.value.contains(point)
         }) else { return }
         stripOrderStore.reorder(draggedID: id, relativeTo: hit.key,
                                 after: point.x > hit.value.midX, current: current)
@@ -597,7 +673,8 @@ struct DockStripView: View {
         let dc = dragController
         guard let p = dc.draggingPayload, p.source == .strip, !dc.isOverDropZone,
               let pt = stripPoint(from: dc.globalLocation) else { return }
-        reorderTarget(at: pt, dragging: p.id, current: projection.liveOrderIDs)
+        reorderTarget(at: pt, dragging: p.id, current: projection.liveOrderIDs,
+                      pinned: projection.pinnedWindowIDs)
     }
 
     /// 文件夹区内重排的唯一驱动，同上。
@@ -806,9 +883,10 @@ struct DockStripView: View {
     /// 抽屉整块落点：**只看 x、永远给得出答案**。判据与理由（以及为什么不能用整帧 `contains`）
     /// 见纯类型 `StripBlockLanding`——简单说，转正判定框故意伸到条上沿之外 16pt，
     /// 而整帧命中在那里永远失败，首次落点因此 100% 退化成末尾。
+    /// `x` is the pointer's position along the bar (`barPoint(_:).x`).
     func blockTarget(atX x: CGFloat, excluding block: Set<String>) -> (id: String, after: Bool)? {
         StripBlockLanding.target(pointerX: x,
-                                 frames: chipFrames.filter { !block.contains($0.key) })
+                                 frames: barFrames(chipFrames.filter { !block.contains($0.key) }))
     }
 
     /// 条上起拖的载荷（窗口卡 / 占位 / 消息 chip / 文件夹 chip）进出本条判定框 → 告诉控制器：
@@ -827,7 +905,8 @@ struct DockStripView: View {
            DisplayIdentity.uuidString(for: screen) == displayUUID {
             dc.claimStripSurface(stripSurfaceID, displayUUID: displayUUID)
         }
-        let box = StripPointerBox.classify(pointer: dc.globalLocation, stripRect: stripRootScreenRect,
+        let box = StripPointerBox.classify(pointer: taskbarEdge.screenCanonical(dc.globalLocation),
+                                           stripRect: taskbarEdge.screenCanonical(stripRootScreenRect),
                                            rightReach: metrics.capsuleGap + metrics.capsuleWidth,
                                            profile: .stripPresence)
         if box.enter {
@@ -849,7 +928,8 @@ struct DockStripView: View {
         let r = stripRootScreenRect
         // 右侧容差伸到胶囊外缘的理由见 `StripPointerBox`（对抽屉来源的载荷胶囊没有别的语义，
         // 它的投放区只有任务条面板，并进来不会和收纳打架）。
-        let box = StripPointerBox.classify(pointer: g, stripRect: r,
+        let box = StripPointerBox.classify(pointer: taskbarEdge.screenCanonical(g),
+                                           stripRect: taskbarEdge.screenCanonical(r),
                                            rightReach: metrics.capsuleGap + metrics.capsuleWidth,
                                            profile: .drawerConversion)
         let enter = box.enter, clearlyOut = box.clearlyOut
@@ -864,7 +944,7 @@ struct DockStripView: View {
             // reject 留在抽屉；releaseToMessaging 由 updateDrawerToMessagingRelease 按消息区范围处理。
             guard mode == .unstash || mode == .keepPlacement else { return }
             // 此刻本组窗口卡还没出现在 live 区，命中目标只在**已有**卡里找（exclude 空集即可）。
-            let target = stripPoint(from: g).flatMap { blockTarget(atX: $0.x, excluding: []) }
+            let target = stripPoint(from: g).flatMap { blockTarget(atX: barPoint($0).x, excluding: []) }
             dc.claimStripSurface(stripSurfaceID)   // 转正的这条从此独占写回，直到落地 / 撤销转正
             dc.convertDrawerToStrip()
             stripOrderStore.stageExternalBlock(bundleID: bid, relativeTo: target?.id, after: target?.after ?? false)
@@ -888,13 +968,14 @@ struct DockStripView: View {
     /// 当前消息区可见 chip 的 bundleID（区内显示序）。喂重排遍历 + 拖动中消失清理。
     /// 消息区范围（"strip" 空间）：现有消息 chip 帧的并集；区空时退化为条头一小段
     /// （释放后消息区在条头物化）。抽屉消息应用的释放判定用它,不认"离开抽屉体"（Codex 评审 P1-3）。
+    /// In the bar's frame of reference (`barFrame`); test it against `barPoint`.
     private func messagingReleaseZone(messagingIDs: [String]) -> CGRect? {
-        let frames = messagingIDs.compactMap { messagingChipFrames[$0] }
+        let frames = messagingIDs.compactMap { messagingChipFrames[$0] }.map(barFrame)
         if let first = frames.first {
             return frames.dropFirst().reduce(first) { $0.union($1) }
         }
         guard stripRootScreenRect != .zero else { return nil }
-        return CGRect(x: 0, y: 0, width: 56, height: stripRootScreenRect.height)
+        return CGRect(x: 0, y: 0, width: 56, height: barBounds.height)
     }
 
     /// 消息区内重排：命中其他消息 chip 帧（外扩 6pt 盖住格间空隙）,按左/右半落位。
@@ -903,9 +984,9 @@ struct DockStripView: View {
         let dc = dragController
         guard let p = dc.draggingPayload, p.source == .messaging,
               !dc.isOverDropZone,
-              let pt = stripPoint(from: dc.globalLocation) else { return }
+              let pt = stripPoint(from: dc.globalLocation).map(barPoint) else { return }
         for bid in messagingIDs where bid != p.bundleID {
-            guard let f = messagingChipFrames[bid], f.insetBy(dx: -6, dy: -6).contains(pt) else { continue }
+            guard let f = messagingChipFrames[bid].map(barFrame), f.insetBy(dx: -6, dy: -6).contains(pt) else { continue }
             messagingStore.reorder(draggedID: p.bundleID, relativeTo: bid, after: pt.x > f.midX)
             return
         }
@@ -917,7 +998,7 @@ struct DockStripView: View {
     private func updateDrawerToMessagingRelease(projection: StripProjection) {
         let dc = dragController
         if dc.isReleasedToMessaging {
-            guard let pt = stripPoint(from: dc.globalLocation),
+            guard let pt = stripPoint(from: dc.globalLocation).map(barPoint),
                   let zone = messagingReleaseZone(messagingIDs: projection.messagingIDs),
                   zone.insetBy(dx: -24, dy: -24).contains(pt),
                   !dc.isOverDropZone else {
@@ -949,7 +1030,7 @@ struct DockStripView: View {
             if isMessagingMember { trace("mode", mode: "\(mode)") }
             return
         }
-        guard let pt = stripPoint(from: dc.globalLocation) else { return trace("noStripRect", mode: "\(mode)") }
+        guard let pt = stripPoint(from: dc.globalLocation).map(barPoint) else { return trace("noStripRect", mode: "\(mode)") }
         let fallback = projection.messagingIDs.compactMap { messagingChipFrames[$0] }.isEmpty
         guard let zone = messagingReleaseZone(messagingIDs: projection.messagingIDs) else {
             return trace("noZone", pt: pt, mode: "\(mode)")
@@ -1005,7 +1086,7 @@ struct DockStripView: View {
             HoverTrace.stripBlockReorder(target: nil, after: false, why: "noStripRect")
             return
         }
-        guard let target = blockTarget(atX: pt.x, excluding: Set(blockIDs)) else {
+        guard let target = blockTarget(atX: barPoint(pt).x, excluding: Set(blockIDs)) else {
             HoverTrace.stripBlockReorder(target: nil, after: false, why: "liveZoneEmpty")
             return
         }
@@ -1252,14 +1333,162 @@ struct DockStripView: View {
         }
     }
 
+    // MARK: Column labels
+    //
+    // Down a side-edge column every card gets one line of text to the right of its icon:
+    // `App — window title` for windows (`WindowDisplayTitle.columnLabel`), the plain name for
+    // everything else. The column is as wide as the widest card anyway (`columnWidth`), so the
+    // text costs no space. Cut off on the right; hovering a cut-off row shows the whole of it.
+
+    /// One entry as the bar draws it: the card, and in a column its label beside it.
+    @ViewBuilder
+    private func columnRow(_ entry: StripEntry, projection: StripProjection, hovered: Bool) -> some View {
+        let card = stripEntryContent(entry, projection: projection, hovered: hovered, entrance: true)
+        if taskbarEdge.isVertical, let text = columnLabelText(for: entry) {
+            HStack(spacing: ChipPillMetrics.iconSpacing * dockScale) {
+                card
+                Text(text)
+                    .font(.system(size: columnLabelPointSize, weight: .bold, design: .rounded))
+                    .foregroundStyle(columnLabelColor(for: entry))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(width: columnLabelWidth, alignment: .leading)
+                    // The text clicks like its card; drags already start anywhere on the row.
+                    .contentShape(Rectangle())
+                    .onTapGesture { columnLabelTapped(entry, projection: projection) }
+            }
+        } else {
+            card
+        }
+    }
+
+    /// The label's point size: the Label Size setting. It does not scale with the bar, so the
+    /// icons (Taskbar Size) and the text are sized independently.
+    var columnLabelPointSize: CGFloat {
+        CGFloat(settingsStore.columnLabelFontSize)
+    }
+
+    /// Whether `text` is wider than the label's room in the label's own font — the SwiftUI
+    /// `.rounded` bold system font, measured through AppKit so the answer matches the cut.
+    private func columnLabelIsCut(_ text: String) -> Bool {
+        let size = columnLabelPointSize
+        let base = NSFont.systemFont(ofSize: size, weight: .bold)
+        let font = base.fontDescriptor.withDesign(.rounded).flatMap { NSFont(descriptor: $0, size: size) } ?? base
+        return (text as NSString).size(withAttributes: [.font: font]).width > columnLabelWidth
+    }
+
+    /// The label's room: it grows with the label's point size and the dragged column width
+    /// (`PanelLayoutMetrics.withColumnLabels`).
+    var columnLabelWidth: CGFloat { metrics.columnLabelWidth }
+
+    /// The text beside an entry in a column; nil = the entry has none (divider, drop gap).
+    func columnLabelText(for entry: StripEntry) -> String? {
+        switch entry {
+        case let .window(item):
+            return WindowDisplayTitle.columnLabel(appName: columnAppName(item), rawTitle: columnRawTitle(item))
+        case let .messagingApp(bid, main):
+            return WindowDisplayTitle.columnLabel(appName: AppDisplayNameResolver.displayName(for: bid),
+                                                  rawTitle: main.map(columnRawTitle))
+        case .keptApp, .pinnedFolder, .shelf, .trash, .divider, .externalDropGhost:
+            return bubbleTitle(for: entry)
+        }
+    }
+
+    /// The hover bubble's text for a column row (two lines for a window), or nil when the label
+    /// already shows all of it.
+    func columnBubbleText(for entry: StripEntry) -> String? {
+        guard let label = columnLabelText(for: entry), columnLabelIsCut(label) else { return nil }
+        switch entry {
+        case let .window(item):
+            return WindowDisplayTitle.columnBubble(appName: columnAppName(item), rawTitle: columnRawTitle(item))
+        case let .messagingApp(bid, main):
+            return WindowDisplayTitle.columnBubble(appName: AppDisplayNameResolver.displayName(for: bid),
+                                                   rawTitle: main.map(columnRawTitle))
+        default:
+            return label
+        }
+    }
+
+    private func columnAppName(_ item: StripItem) -> String {
+        item.bundleIdentifier.map(AppDisplayNameResolver.displayName(for:)) ?? item.appID
+    }
+
+    /// The title the card would show, including one held back while it settles (`WindowTitleSettle`).
+    private func columnRawTitle(_ item: StripItem) -> String {
+        runtime.heldLabelTitlesByChipID[item.id] ?? item.title
+    }
+
+    /// Greyed like a titled card's text when its window is off the desktop (minimized or hidden).
+    private func columnLabelColor(for entry: StripEntry) -> Color {
+        if case let .window(item) = entry, !item.isOnDesktop { return theme.effectiveLabelInactive.color }
+        return theme.labelActive.color
+    }
+
+    /// A click on the text does what a click on its card does.
+    private func columnLabelTapped(_ entry: StripEntry, projection: StripProjection) {
+        switch entry {
+        case let .window(item):
+            runtime.toggle(windowID: item.actionWindowID)
+        case let .messagingApp(bid, main):
+            if let main {
+                runtime.toggle(windowID: main.actionWindowID)
+            } else {
+                launcherTap(bid, hasRealWindow: projection.hasRealWindow(bundleID: bid))
+            }
+        case let .keptApp(bid):
+            launcherTap(bid, hasRealWindow: false)
+        case let .pinnedFolder(path):
+            folderPrimaryTap(path)
+        case .shelf:
+            shelfChipTapped()
+        case .trash:
+            trashChipTapped()
+        case .divider, .externalDropGhost:
+            return
+        }
+    }
+
+    /// The row of entries: across a horizontal bar, down a column (left-aligned, so icon cards
+    /// line up whatever the titled cards' widths).
+    @ViewBuilder
+    private func stripStack<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        if taskbarEdge.isVertical {
+            VStack(alignment: .leading, spacing: Style.chipSpacing * dockScale, content: content)
+        } else {
+            HStack(alignment: .center, spacing: Style.chipSpacing * dockScale, content: content)
+        }
+    }
+
+    /// Fades the strip's two ends where content scrolls under them, along the bar's axis.
+    @ViewBuilder
+    private var stripEdgeFade: some View {
+        let fade = Style.edgeFadeWidth * dockScale
+        if taskbarEdge.isVertical {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: fade)
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: fade)
+            }
+        } else {
+            HStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: fade)
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: fade)
+            }
+        }
+    }
+
     /// 悬停命中帧在这里**一处**上报（`StripHoverFramePreferenceKey`），所以四个区不可能漏
     /// ——`ChipView.onWindowTitleTooltipEvent` 当年那种"某个调用点漏传、编译还过"的坑
     /// 在这条路径上不会重演。分隔线也报：它占住那 5pt，指针压上去就没人拥有气泡，
     /// 于是宽缝天然是"什么都不弹"，两边的卡也不会隔着它抢。
     @ViewBuilder
     private func stripEntryView(_ entry: StripEntry, projection: StripProjection) -> some View {
-        stripEntryContent(entry, projection: projection,
-                          hovered: hoveredEntryID == entry.id, entrance: true)
+        columnRow(entry, projection: projection, hovered: hoveredEntryID == entry.id)
             .background(
                 GeometryReader { geo in
                     Color.clear.preference(key: StripHoverFramePreferenceKey.self,
@@ -1294,16 +1523,28 @@ struct DockStripView: View {
                      isHovered: hovered,
                      // 只有 app-* 兜底卡（访达常驻 / 保留兜底）代表整个应用；普通窗口卡不列。
                      showsWindowListInMenu: item.isAppLevelFallback,
+                     // A column writes every card's text beside it (`columnRow`), so the card itself
+                     // is always the plain icon there.
+                     iconOnly: taskbarEdge.isVertical,
                      showRunningDot: true,
                      pulseNonce: chipPulseNonces[item.id] ?? 0,
                      badgeText: windowBadge,
                      slotHidden: projection.draggingID == item.id)
         case .divider:
-            Rectangle()
-                .fill(theme.zoneDivider.color)
-                // 宽度是发丝线，恒 1pt 不缩；只有高度跟着档位走。
-                .frame(width: 1, height: Style.dividerHeight * dockScale)
-                .padding(.horizontal, Style.dividerSidePadding * dockScale)
+            if taskbarEdge.isVertical {
+                // Turned to run across the column, centred on the icon cards' line.
+                Rectangle()
+                    .fill(theme.zoneDivider.color)
+                    .frame(width: Style.dividerHeight * dockScale, height: 1)
+                    .padding(.vertical, Style.dividerSidePadding * dockScale)
+                    .padding(.horizontal, (ChipPillMetrics.cardWidth - Style.dividerHeight) / 2 * dockScale)
+            } else {
+                Rectangle()
+                    .fill(theme.zoneDivider.color)
+                    // 宽度是发丝线，恒 1pt 不缩；只有高度跟着档位走。
+                    .frame(width: 1, height: Style.dividerHeight * dockScale)
+                    .padding(.horizontal, Style.dividerSidePadding * dockScale)
+            }
         case let .pinnedFolder(path):
             let index = 1 + (pinnedFolderStore.folderPaths.firstIndex(of: path) ?? 0)
             let delay = Double(min(index, 6)) * 0.018

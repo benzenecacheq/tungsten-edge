@@ -63,6 +63,22 @@ enum MessagingMainWindowDecision {
         return candidates.count == 1 ? candidates[0].id : nil
     }
 
+    /// The window a pinned app's tile stands for. Same as `mainWindowID` when that finds one;
+    /// otherwise the first window (in the given order) that the exclusion table doesn't rule out,
+    /// so a pinned app with windows always has its tile take one of them, and the rest sit right
+    /// after it. Only `nil` when there is no such window.
+    static func tileWindowID(
+        bundleID: String,
+        windows: [WindowFact],
+        titleMatchesAppName: (String) -> Bool
+    ) -> String? {
+        if let main = mainWindowID(bundleID: bundleID, windows: windows, titleMatchesAppName: titleMatchesAppName) {
+            return main
+        }
+        let excluded = excludedTitlesByBundleID[bundleID] ?? []
+        return windows.first { !excluded.contains(normalize($0.title)) }?.id
+    }
+
     static func normalize(_ title: String) -> String {
         title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }

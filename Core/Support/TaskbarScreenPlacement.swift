@@ -58,6 +58,76 @@ enum TaskbarScreenPlacement: Equatable {
     }
 }
 
+/// Which screen edge the bar hugs. The raw value is persisted; a value this version does not
+/// know reads as `bottom` without rewriting the key (same rule as `TaskbarScreenMode`).
+///
+/// The bar's decisions — hover ownership, right-click zones, reorder halves, drop routing — were
+/// all written for a horizontal bar and compare x only. Rather than fork each of them, a vertical
+/// bar maps its geometry into that horizontal frame of reference first (`stripCanonical` /
+/// `screenCanonical`): canonical x runs along the bar from its start, canonical y grows the same
+/// way it does for the bottom bar relative to its edge. On `bottom` both maps are the identity.
+enum TaskbarEdge: String, CaseIterable {
+    case bottom
+    case right
+
+    static let `default` = TaskbarEdge.bottom
+
+    /// The bar is a column: its length runs top to bottom and its thickness is horizontal.
+    var isVertical: Bool { self == .right }
+
+    /// The status menu's Taskbar Position ▸ row.
+    var displayName: String {
+        switch self {
+        case .bottom: return String(localized: "Bottom")
+        case .right: return String(localized: "Right")
+        }
+    }
+
+    /// Strip space (top-left origin, y down) → canonical. A column's top-to-bottom order becomes
+    /// left-to-right, and its x (growing toward the screen edge) becomes y (which grows toward the
+    /// bottom edge on a horizontal bar).
+    func stripCanonical(_ point: CGPoint) -> CGPoint {
+        isVertical ? CGPoint(x: point.y, y: point.x) : point
+    }
+
+    func stripCanonical(_ rect: CGRect) -> CGRect {
+        isVertical ? CGRect(x: rect.minY, y: rect.minX, width: rect.height, height: rect.width) : rect
+    }
+
+    /// AppKit screen space (bottom-left origin, y up) → canonical. Along the right edge the bar
+    /// runs downward (canonical x = -y) and "away from the edge" is leftward (canonical y = -x),
+    /// matching a bottom bar, where away from the edge is up.
+    func screenCanonical(_ point: CGPoint) -> CGPoint {
+        isVertical ? CGPoint(x: -point.y, y: -point.x) : point
+    }
+
+    func screenCanonical(_ rect: CGRect) -> CGRect {
+        isVertical ? CGRect(x: -rect.maxY, y: -rect.maxX, width: rect.height, height: rect.width) : rect
+    }
+}
+
+/// Which end of a side-edge column stays put as cards come and go. The fixed point is set by
+/// the Vertical Position slider; the raw value is persisted, an unknown one reads as `both`.
+enum ColumnGrowth: String, CaseIterable {
+    /// The top stays put; the column grows and shrinks at the bottom.
+    case down
+    /// The bottom (the drawer capsule's) stays put; the column grows upward.
+    case up
+    /// The middle stays put.
+    case both
+
+    static let `default` = ColumnGrowth.both
+
+    /// The status menu's Bar Grows ▸ row.
+    var displayName: String {
+        switch self {
+        case .down: return String(localized: "Downward")
+        case .up: return String(localized: "Upward")
+        case .both: return String(localized: "Both Ways")
+        }
+    }
+}
+
 /// 单个任务条单元（一个 `PanelCoordinator`）的安放。①② 下唯一的单元 `.followSettings`
 /// 读设置自己决定；③④ 下编排层给每块屏建一个 `.fixed` 单元——它的行为**就是**固定档
 ///（不切屏、只在本屏底边唤醒、本屏缺席暂回主屏），只是屏由编排层指定而不是由设置指定。

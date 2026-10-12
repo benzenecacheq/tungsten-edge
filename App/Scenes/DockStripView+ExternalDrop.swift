@@ -13,7 +13,7 @@ extension DockStripView {
         // **必须在第一次插空档之前捕获**，否则冻住的是已经被空档撑宽的那个值，环照样成立。
         // 这里是整条悬停会话唯一的起点，所以捕获点只能在这儿。
         if frozenStripWidth == nil, stripRootScreenRect != .zero {
-            frozenStripWidth = stripRootScreenRect.width
+            frozenStripWidth = barLength
         }
         // A gap still waiting for the previous drop's landing now belongs to this session.
         externalDropGhostTimeout?.invalidate()
@@ -76,7 +76,7 @@ extension DockStripView {
         // 落点判定与抽屉转正共用一份（`StripBlockLanding`）。空档不上报卡帧，所以 `chipFrames`
         // 里只有真卡——但它们的**位置**已经被空档推开了，所以判定结果必须折成插入序号才稳定
         //（理由见 `StripDropGhost`）。显示序按帧的左缘排，与渲染序同源。
-        let orderedLiveIDs = chipFrames.sorted { $0.value.minX < $1.value.minX }.map(\.key)
+        let orderedLiveIDs = barFrames(chipFrames).sorted { $0.value.minX < $1.value.minX }.map(\.key)
         let target = blockTarget(atX: x, excluding: [])
         let index = StripDropRouting.ghostInsertionIndex(orderedIDs: orderedLiveIDs,
                                                          targetID: target?.id,

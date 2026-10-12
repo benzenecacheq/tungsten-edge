@@ -1056,6 +1056,30 @@ final class FinderP0Tests: XCTestCase {
         )
     }
 
+    /// Terminal reports a minimized window as `AXDialog`, like Finder; it must still seat at launch.
+    func testAppTrackerEligibilityAdmitsMinimizedDialogWindowsForEveryApp() {
+        let eligibility = AppTrackerWindowEligibility()
+        func eligible(minimized: Bool) -> Bool {
+            eligibility.isEligible(
+                title: "Terminal — -tcsh — 80×58",
+                role: kAXWindowRole as String,
+                subrole: kAXDialogSubrole as String,
+                bounds: CGRect(x: 0, y: 0, width: 597, height: 861),
+                alpha: 1,
+                isMinimized: minimized,
+                isBelowNormalLayer: false,
+                application: AppTrackerWindowEligibility.Application(
+                    bundleIdentifier: "com.apple.Terminal",
+                    appName: "Terminal",
+                    activationPolicy: .regular,
+                    executablePath: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal"
+                )
+            )
+        }
+        XCTAssertTrue(eligible(minimized: true))
+        XCTAssertFalse(eligible(minimized: false), "a visible dialog still gets no card")
+    }
+
     /// Widgetify's desktop widgets: `.regular`, empty title, AXStandardWindow, CG layer -20.
     func testAppTrackerEligibilityRejectsBelowNormalLayerWindowsForEveryApp() {
         let eligibility = AppTrackerWindowEligibility()
@@ -1503,7 +1527,7 @@ final class FinderP0Tests: XCTestCase {
         )
     }
 
-    func testAppTrackerEligibilityAdmitsMinimizedFinderDialogButNotOtherApps() {
+    func testAppTrackerEligibilityAdmitsMinimizedDialogForFinderAndOtherApps() {
         let eligibility = AppTrackerWindowEligibility()
         let bounds = CGRect(x: 297, y: 611, width: 1227, height: 504)
         let finder = AppTrackerWindowEligibility.Application(
@@ -1543,7 +1567,7 @@ final class FinderP0Tests: XCTestCase {
                 application: finder
             )
         )
-        XCTAssertFalse(
+        XCTAssertTrue(
             eligibility.isEligible(
                 title: "Untitled",
                 role: kAXWindowRole as String,

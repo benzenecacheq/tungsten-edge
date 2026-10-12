@@ -72,4 +72,13 @@ final class FolderChipDropZoneTests: XCTestCase {
         let geometry = FolderChipDropGeometry(stripScreenRect: .zero, folderZoneMinX: folderZoneMinX)
         XCTAssertEqual(geometry.classify(screenPoint: CGPoint(x: 350, y: 552)), .outsideStrip)
     }
+
+    func testRightEdgeColumnClassifiesAlongItsLength() {
+        // A column 210 × 400 at the right edge; the folder zone starts 250pt down from its top.
+        let geometry = FolderChipDropGeometry(stripScreenRect: CGRect(x: 1294, y: 300, width: 210, height: 400),
+                                              folderZoneMinX: 250, edge: .right)
+        XCTAssertEqual(geometry.classify(screenPoint: CGPoint(x: 1300, y: 400)), .folderZone, "300pt down")
+        XCTAssertEqual(geometry.classify(screenPoint: CGPoint(x: 1300, y: 600)), .liveZone, "100pt down")
+        XCTAssertEqual(geometry.classify(screenPoint: CGPoint(x: 1200, y: 400)), .outsideStrip)
+    }
 }

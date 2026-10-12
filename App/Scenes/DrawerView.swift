@@ -35,6 +35,9 @@ struct DrawerView: View {
     /// 关着的抽屉视图会一直活到下次打开，不问就会拿过期位置往共享的控制器里写——副屏抽屉拖出的图标
     /// 曾因此飞去主屏抽屉落位（同日第二起）。
     let isDrawerOpen: () -> Bool
+    /// The edge the bar hugs, read when a drag needs it: a side bar opens the drawer beside it,
+    /// which turns "above the bar" into "inside of the bar". No default, like `isDrawerOpen`.
+    let taskbarEdge: () -> TaskbarEdge
     /// 点击 app 图标执行「唤出」或「启动」后回调。由 PanelCoordinator 注入，用于关闭抽屉。
     /// 「最小化（前台 → 收起）」不触发——抽屉保持打开。右键菜单、拖动操作同样不触发。
     var onPrimaryAction: () -> Void = {}
@@ -391,11 +394,13 @@ struct DrawerView: View {
         let dc = dragController
         // 只有**开着的**抽屉才有资格转正 / 撤销（理由见 `isDrawerOpen`）。
         guard dc.draggingPayload != nil, drawerRootScreenRect != .zero, isDrawerOpen() else { return }
-        let g = dc.globalLocation
         // The plate, not the window (40pt of transparent border). The floor is the capsule's top
         // = the bar's top edge: anything lower would convert a chip still being dragged along
-        // the bar.
-        let r = PanelGeometry.folderPopupPlateFrame(panelFrame: drawerRootScreenRect)
+        // the bar. Beside a column the same tests run in the bar's canonical frame, where the
+        // floor is the plate's side facing the bar.
+        let edge = taskbarEdge()
+        let g = edge.screenCanonical(dc.globalLocation)
+        let r = edge.screenCanonical(PanelGeometry.folderPopupPlateFrame(panelFrame: drawerRootScreenRect))
         let floor = PanelGeometry.drawerBodyFloorY(plate: r)
         // 进入阈值松（容差大,好进）；撤销阈值更靠外（迟滞带,防边缘反复转正/撤销 → 抽屉一胀一缩抖）。
         let enterBody = g.x >= r.minX - 8  && g.x <= r.maxX + 8  && g.y >= floor
@@ -460,6 +465,7 @@ struct DrawerRootView: View {
     let onPanelSizeChange: (CGSize) -> Void
     let usesLiquidGlass: Bool
     let isDrawerOpen: () -> Bool
+    let taskbarEdge: () -> TaskbarEdge
     let onPrimaryAction: () -> Void
     let runtime: AppRuntime
     let drawerStore: DrawerStore
@@ -476,6 +482,7 @@ struct DrawerRootView: View {
                    onPanelSizeChange: onPanelSizeChange,
                    usesLiquidGlass: usesLiquidGlass,
                    isDrawerOpen: isDrawerOpen,
+                   taskbarEdge: taskbarEdge,
                    onPrimaryAction: onPrimaryAction)
             .environmentObject(runtime).environmentObject(drawerStore).environmentObject(messagingStore)
             .environmentObject(drawerOrderStore).environmentObject(dragController)

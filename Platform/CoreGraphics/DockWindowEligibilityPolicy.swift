@@ -175,7 +175,11 @@ struct AppTrackerWindowEligibility {
             )
         }
 
+        // Terminal does what Finder does (`FinderWindowRules.isMinimizedMainWindow`): every
+        // minimized window reports `AXDialog` until restored, so one minimized before launch
+        // would never get a card. The same pair is admitted for every app.
         return AXTaskbarWindowRules.isMainWindow(role: role, subrole: subrole, bounds: bounds)
+            || FinderWindowRules.isMinimizedMainWindow(role: role, subrole: subrole, isMinimized: isMinimized)
     }
 }
 

@@ -61,6 +61,10 @@ struct DrawerCapsuleButton: View {
     /// While a card is dragged, hover gives way to the drop feedback (the drag wins).
     private var hoverEnabled: Bool { !isPanelHeightResizing && dragController.draggingPayload == nil }
 
+    private var backgroundLayers: (glass: Double, plate: Double) {
+        TaskbarBackgroundOpacity.layers(for: settingsStore.taskbarBackgroundOpacity)
+    }
+
     var body: some View {
         let ids = memberIDs
         let pageCount = DrawerCapsulePaging.pageCount(memberCount: ids.count)
@@ -74,6 +78,10 @@ struct DrawerCapsuleButton: View {
                               cornerRadius: DockShape.panelCornerRadius * dockScale,
                               usesLiquidGlass: usesLiquidGlass,
                               matchesDockRefraction: true)
+                .opacity(backgroundLayers.glass)   // same setting as the bar
+            RoundedRectangle(cornerRadius: DockShape.panelCornerRadius * dockScale, style: .continuous)
+                .fill(Color(nsColor: .windowBackgroundColor))
+                .opacity(backgroundLayers.plate)
 
             // Hover and press feedback move only the cell under the pointer; the outer frame
             // (backdrop + rim) stays still.
