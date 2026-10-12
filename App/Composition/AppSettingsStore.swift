@@ -122,6 +122,8 @@ final class AppSettingsStore: ObservableObject {
     /// Window cards only for windows on the desktop showing now; pinned apps keep their icons,
     /// with a running dot only while they have a window here.
     @Published private(set) var currentDesktopOnly: Bool
+    /// Move desktop icons Finder put under the bar to free spots beside it (`DesktopIconMover`).
+    @Published private(set) var keepDesktopIconsClear: Bool
     /// 任务条尺寸档位。面板几何与条内所有 chip 尺寸都由它派生。
     @Published private(set) var dockPanelHeight: DockPanelHeight
     /// 悬停效果档位。只影响条内 chip 的悬停视觉，静息布局逐像素不变（因此无需 relayout）。
@@ -222,6 +224,7 @@ final class AppSettingsStore: ObservableObject {
             Keys.showShelf: true,
             Keys.showTrash: true,
             Keys.currentDesktopOnly: false,
+            Keys.keepDesktopIconsClear: false,
             Keys.fullscreenIntentEnabled: true,
             Keys.nativeDockAutoHideDelay: Self.defaultNativeDockAutoHideDelay,
             // 首次安装 = 常驻；remembered 的种子仍是有限档，见常量注释。
@@ -232,6 +235,7 @@ final class AppSettingsStore: ObservableObject {
         showShelf = defaults.bool(forKey: Keys.showShelf)
         showTrash = defaults.bool(forKey: Keys.showTrash)
         currentDesktopOnly = defaults.bool(forKey: Keys.currentDesktopOnly)
+        keepDesktopIconsClear = defaults.bool(forKey: Keys.keepDesktopIconsClear)
         // 有意**不**进上面的 register：缺键即 false = 老用户维持关。
         // 全新安装那一次由 `seedWindowLiftEnabledForFreshInstall()` 显式写成 true——
         // register 一个 true 会把**所有**从没碰过这个开关的老用户一并打开，而这个功能
@@ -521,6 +525,12 @@ final class AppSettingsStore: ObservableObject {
         defaults.set(value, forKey: Keys.showTrash)
     }
 
+    func setKeepDesktopIconsClear(_ value: Bool) {
+        guard keepDesktopIconsClear != value else { return }
+        keepDesktopIconsClear = value
+        defaults.set(value, forKey: Keys.keepDesktopIconsClear)
+    }
+
     func setCurrentDesktopOnly(_ value: Bool) {
         guard currentDesktopOnly != value else { return }
         currentDesktopOnly = value
@@ -697,6 +707,7 @@ private enum Keys {
     // Never read the retired com.tungsten.edge.trash.visible key.
     static let showTrash = "com.tungsten.edge.showTrash"
     static let currentDesktopOnly = "com.tungsten.edge.currentDesktopOnly"
+    static let keepDesktopIconsClear = "com.tungsten.edge.keepDesktopIconsClear"
     /// Continuous bar height in points (since the drag-to-resize release).
     static let dockPanelHeight = "com.tungsten.edge.dockPanelHeight"
     /// Legacy four-tier raw string. **Read once for migration, never written or removed.**

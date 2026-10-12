@@ -159,6 +159,22 @@ extension PanelCoordinator {
             .sink { [weak self] _ in
                 DispatchQueue.main.async { [weak self] in self?.relayout(animated: false) }
             }
+        // Desktop icons Finder put under the bar move beside it (the bar's frame without the
+        // panel's shadow margin; nothing while the bar is not on screen).
+        keepDesktopIconsClearSubscription = settingsStore.$keepDesktopIconsClear
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] enabled in
+                guard let self else { return }
+                if enabled, self.desktopIconMover == nil {
+                    self.desktopIconMover = DesktopIconMover { [weak self] in
+                        guard let panel = self?.dockPanel, panel.isVisible else { return nil }
+                        let inset = PanelLayoutMetrics.shadowPadding
+                        return panel.frame.insetBy(dx: inset, dy: inset)
+                    }
+                }
+                self.desktopIconMover?.setEnabled(enabled)
+            }
         // Show Only Windows on This Desktop adds or drops cards: resize as for the shelf / trash.
         currentDesktopOnlySubscription = settingsStore.$currentDesktopOnly
             .removeDuplicates()

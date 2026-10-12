@@ -187,6 +187,7 @@
 		B10000000000000000000131 /* WindowDisplayAttribution.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000130 /* WindowDisplayAttribution.swift */; };
 		B1000000000000000000013F /* WindowDisplayMove.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000013E /* WindowDisplayMove.swift */; };
 		B10000000000000000000134 /* StripDisplayFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000133 /* StripDisplayFilter.swift */; };
+		B71BBBD7828F086D74F37CC9 /* DesktopIconPlacement.swift in Sources */ = {isa = PBXBuildFile; fileRef = B781BBFF78603DCF2EF58565 /* DesktopIconPlacement.swift */; };
 		B70AD6FE2F8764B76AB57E90 /* CurrentDesktopFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B725299D039EF895DCA2C6D5 /* CurrentDesktopFilter.swift */; };
 		B10000000000000000000202 /* StripSharedAffixTrim.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000201 /* StripSharedAffixTrim.swift */; };
 		B10000000000000000000144 /* StripPointerBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000143 /* StripPointerBox.swift */; };
@@ -210,6 +211,7 @@
 		B10000000000000000000132 /* WindowDisplayAttribution.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000130 /* WindowDisplayAttribution.swift */; };
 		B10000000000000000000140 /* WindowDisplayMove.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000013E /* WindowDisplayMove.swift */; };
 		B10000000000000000000135 /* StripDisplayFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000133 /* StripDisplayFilter.swift */; };
+		B7D9C515B41AB0B4F6422609 /* DesktopIconPlacement.swift in Sources */ = {isa = PBXBuildFile; fileRef = B781BBFF78603DCF2EF58565 /* DesktopIconPlacement.swift */; };
 		B7BAF125840EC76E4E76B0FF /* CurrentDesktopFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B725299D039EF895DCA2C6D5 /* CurrentDesktopFilter.swift */; };
 		B10000000000000000000203 /* StripSharedAffixTrim.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000201 /* StripSharedAffixTrim.swift */; };
 		B10000000000000000000145 /* StripPointerBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000143 /* StripPointerBox.swift */; };
@@ -342,6 +344,7 @@
 		A0000000000000000000103C /* IdentityRuleEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000050 /* IdentityRuleEngine.swift */; };
 		A0000000000000000000101B /* FinderWindowRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000055 /* FinderWindowRules.swift */; };
 		A00000000000000000001101 /* FinderWindowContentsReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F01 /* FinderWindowContentsReader.swift */; };
+		B78619EE1323B91B2FAE856F /* DesktopIconMover.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D12461136D781D5FC703D6 /* DesktopIconMover.swift */; };
 		A00000000000000000001102 /* FolderInteraction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F02 /* FolderInteraction.swift */; };
 		A00000000000000000001103 /* FinderAppleEventMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F03 /* FinderAppleEventMatcher.swift */; };
 		A00000000000000000001104 /* FinderAppleEventMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000F03 /* FinderAppleEventMatcher.swift */; };
@@ -369,6 +372,7 @@
 		A0000000000000000000101E /* FinderWindowRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000055 /* FinderWindowRules.swift */; };
 		A0000000000000000000101F /* FinderP0Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000058 /* FinderP0Tests.swift */; };
 		B7ABF8240B55C046448D2651 /* XQuartzWindowInventoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78E9ADC63124FEF04F100A6 /* XQuartzWindowInventoryTests.swift */; };
+		B717BB843A04FE580BD04A10 /* DesktopIconPlacementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7AFFDF23F4E4CECDAEF337C /* DesktopIconPlacementTests.swift */; };
 		B71ADA02379B5CCD33FE20EA /* CurrentDesktopFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E53BB28E43E19D3D11DD2A /* CurrentDesktopFilterTests.swift */; };
 		A00000000000000000001020 /* Identifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000006 /* Identifiers.swift */; };
 		A00000000000000000001021 /* WindowModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000007 /* WindowModels.swift */; };
@@ -761,6 +765,7 @@
 		A00000000000000000000065 /* AppFallbackRetentionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFallbackRetentionPolicy.swift; sourceTree = "<group>"; };
 		A00000000000000000000055 /* FinderWindowRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderWindowRules.swift; sourceTree = "<group>"; };
 		A00000000000000000000F01 /* FinderWindowContentsReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderWindowContentsReader.swift; sourceTree = "<group>"; };
+		B7D12461136D781D5FC703D6 /* DesktopIconMover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopIconMover.swift; sourceTree = "<group>"; };
 		A00000000000000000000012 /* FinderSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderSource.swift; sourceTree = "<group>"; };
 		A00000000000000000000013 /* PermissionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionService.swift; sourceTree = "<group>"; };
 		A0000000000000000000B010 /* AccessibilityPermissionDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPermissionDecision.swift; sourceTree = "<group>"; };
@@ -779,6 +784,7 @@
 		A00000000000000000000019 /* window-lab */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "window-lab"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000000000000000058 /* FinderP0Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderP0Tests.swift; sourceTree = "<group>"; };
 		B78E9ADC63124FEF04F100A6 /* XQuartzWindowInventoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XQuartzWindowInventoryTests.swift; sourceTree = "<group>"; };
+		B7AFFDF23F4E4CECDAEF337C /* DesktopIconPlacementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopIconPlacementTests.swift; sourceTree = "<group>"; };
 		B7E53BB28E43E19D3D11DD2A /* CurrentDesktopFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentDesktopFilterTests.swift; sourceTree = "<group>"; };
 		A00000000000000000008040 /* AppSettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStoreTests.swift; sourceTree = "<group>"; };
 		A000000000000000000090A0 /* PanelGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelGeometryTests.swift; sourceTree = "<group>"; };
@@ -826,6 +832,7 @@
 		B10000000000000000000130 /* WindowDisplayAttribution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowDisplayAttribution.swift; sourceTree = "<group>"; };
 		B1000000000000000000013E /* WindowDisplayMove.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowDisplayMove.swift; sourceTree = "<group>"; };
 		B10000000000000000000133 /* StripDisplayFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StripDisplayFilter.swift; sourceTree = "<group>"; };
+		B781BBFF78603DCF2EF58565 /* DesktopIconPlacement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopIconPlacement.swift; sourceTree = "<group>"; };
 		B725299D039EF895DCA2C6D5 /* CurrentDesktopFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentDesktopFilter.swift; sourceTree = "<group>"; };
 		B10000000000000000000201 /* StripSharedAffixTrim.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StripSharedAffixTrim.swift; sourceTree = "<group>"; };
 		B10000000000000000000143 /* StripPointerBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StripPointerBox.swift; sourceTree = "<group>"; };
@@ -1123,6 +1130,7 @@
 				B10000000000000000000130 /* WindowDisplayAttribution.swift */,
 				B1000000000000000000013E /* WindowDisplayMove.swift */,
 				B10000000000000000000133 /* StripDisplayFilter.swift */,
+				B781BBFF78603DCF2EF58565 /* DesktopIconPlacement.swift */,
 				B725299D039EF895DCA2C6D5 /* CurrentDesktopFilter.swift */,
 				B10000000000000000000201 /* StripSharedAffixTrim.swift */,
 				B10000000000000000000143 /* StripPointerBox.swift */,
@@ -1293,6 +1301,7 @@
 				A7A500000000000000000005 /* FinderTrashClient.swift */,
 				A00000000000000000000055 /* FinderWindowRules.swift */,
 				A00000000000000000000F01 /* FinderWindowContentsReader.swift */,
+				B7D12461136D781D5FC703D6 /* DesktopIconMover.swift */,
 				A00000000000000000000012 /* FinderSource.swift */,
 			);
 			path = Finder;
@@ -1395,6 +1404,7 @@
 				C20000000000000000000011 /* RunningStateSweepDecisionTests.swift */,
 				A00000000000000000000058 /* FinderP0Tests.swift */,
 				B78E9ADC63124FEF04F100A6 /* XQuartzWindowInventoryTests.swift */,
+				B7AFFDF23F4E4CECDAEF337C /* DesktopIconPlacementTests.swift */,
 				B7E53BB28E43E19D3D11DD2A /* CurrentDesktopFilterTests.swift */,
 				A0000000000000000000B060 /* PermissionOnboardingTests.swift */,
 				A00000000000000000000F04 /* FinderAppleEventMatcherTests.swift */,
@@ -1786,6 +1796,7 @@
 					B10000000000000000000131 /* WindowDisplayAttribution.swift in Sources */,
 					B1000000000000000000013F /* WindowDisplayMove.swift in Sources */,
 					B10000000000000000000134 /* StripDisplayFilter.swift in Sources */,
+					B71BBBD7828F086D74F37CC9 /* DesktopIconPlacement.swift in Sources */,
 					B70AD6FE2F8764B76AB57E90 /* CurrentDesktopFilter.swift in Sources */,
 					B10000000000000000000202 /* StripSharedAffixTrim.swift in Sources */,
 					B10000000000000000000144 /* StripPointerBox.swift in Sources */,
@@ -1850,6 +1861,7 @@
 				B7B8C30EDB6CFD377C426FBF /* XQuartzWindowInventory.swift in Sources */,
 				A0000000000000000000101B /* FinderWindowRules.swift in Sources */,
 				A00000000000000000001101 /* FinderWindowContentsReader.swift in Sources */,
+				B78619EE1323B91B2FAE856F /* DesktopIconMover.swift in Sources */,
 				A00000000000000000001102 /* FolderInteraction.swift in Sources */,
 				A00000000000000000001103 /* FinderAppleEventMatcher.swift in Sources */,
 				A00000000000000000001012 /* FinderSource.swift in Sources */,
@@ -1936,6 +1948,7 @@
 				C20000000000000000000004 /* RunningApplicationStore.swift in Sources */,
 				A0000000000000000000101F /* FinderP0Tests.swift in Sources */,
 				B7ABF8240B55C046448D2651 /* XQuartzWindowInventoryTests.swift in Sources */,
+				B717BB843A04FE580BD04A10 /* DesktopIconPlacementTests.swift in Sources */,
 				B71ADA02379B5CCD33FE20EA /* CurrentDesktopFilterTests.swift in Sources */,
 				A0000000000000000000B012 /* AccessibilityPermissionDecision.swift in Sources */,
 				A0000000000000000000B022 /* PermissionRecoveryMachine.swift in Sources */,
@@ -2019,6 +2032,7 @@
 				B10000000000000000000132 /* WindowDisplayAttribution.swift in Sources */,
 				B10000000000000000000140 /* WindowDisplayMove.swift in Sources */,
 				B10000000000000000000135 /* StripDisplayFilter.swift in Sources */,
+				B7D9C515B41AB0B4F6422609 /* DesktopIconPlacement.swift in Sources */,
 				B7BAF125840EC76E4E76B0FF /* CurrentDesktopFilter.swift in Sources */,
 				B10000000000000000000203 /* StripSharedAffixTrim.swift in Sources */,
 				B10000000000000000000145 /* StripPointerBox.swift in Sources */,
