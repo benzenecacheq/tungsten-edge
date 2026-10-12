@@ -114,6 +114,8 @@ final class AppTracker: ObservableObject {
     /// One reading per running XQuartz server (XQuartz itself plus `xdesk`'s per-desktop copies).
     private var xquartzReadings: [pid_t: XQuartzWindowReader.Reading] = [:]
     private var xquartzReadInFlight = false
+    /// Last logged poll outcome (`pid:windows` per server, `nil` = unreadable); logged on change only.
+    private var xquartzPollSummary = ""
     private var isScanningCandidates = false
     /// Per-pid retry task asking whether a freshly seatless process is still `.regular`
     /// (`scheduleNonRegularEviction`). Ice flips back to `.accessory` right after its settings
@@ -1979,6 +1981,13 @@ final class AppTracker: ObservableObject {
 
     private func landXQuartzReadings(_ readings: [(pid: pid_t, reading: XQuartzWindowReader.Reading?)]) {
         xquartzReadInFlight = false
+        let summary = readings
+            .map { "\($0.pid):\($0.reading.map { String($0.windows.count) } ?? "nil")" }
+            .joined(separator: ",")
+        if summary != xquartzPollSummary {
+            logger.info("xquartz poll: \(summary.isEmpty ? "no servers" : summary, privacy: .public)")
+            xquartzPollSummary = summary
+        }
         var next: [pid_t: XQuartzWindowReader.Reading] = [:]
         for (pid, reading) in readings {
             // Unreadable menu: keep this process's last reading rather than drop its cards.
