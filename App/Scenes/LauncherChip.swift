@@ -54,6 +54,9 @@ struct LauncherChip: View {
     /// 一变 true 就清按压缩放：重排会挪动它、SwiftUI 取消按压手势，`isTapPressed` 只能靠 1s
     /// 看门狗复位，落地显形时可能还是 0.93——和以 1.0 停稳的载体差一截。理由同 `ChipView.slotHidden`。
     var slotHidden: Bool = false
+    /// Running, but drawn without the dot: "Show Only Windows on This Desktop" is on and every
+    /// window of the app is on another desktop. Only the dot changes; taps and menus stay running.
+    var hidesRunningDot: Bool = false
     /// 悬停反馈按住（只有 `.selfTracked` 的抽屉需要）：刚落定、指针还没动的那一格
     /// （`DragController.hoverHoldPayload`）以及正被拎着的那一格。`.onHover` 在格子透明期间照样
     /// 为 true，不按住的话落地显形那一刻就直接是 1.10——安静档「落位抖动」在抽屉里的形态。
@@ -102,7 +105,7 @@ struct LauncherChip: View {
     }
 
     var body: some View {
-        let visual = LauncherChipVisualPlan.visual(isRunning: isRunning)
+        let visual = LauncherChipVisualPlan.visual(isRunning: isRunning && !hidesRunningDot)
         // **悬停不改变任何像素，所以不挂动画驱动器**——与 `ChipView.bareIconChip` 逐字相同
         // （2026-08-17：那边先拆了，这边漏拆，白跑了一轮 0.18s 空动画）。
         // 理由见 `bareIconChip` 的注释：主线程一忙 macOS 就合并鼠标移动事件，横扫会漏格。

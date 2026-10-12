@@ -86,6 +86,9 @@ struct StripItem: Hashable {
     let canHide: Bool
     let canClose: Bool
     let isOnDesktop: Bool
+    /// The chip's window (any tab of a tab group) is on a desktop showing right now; true when
+    /// unknown and for app-level fallback cards. Live fact only.
+    let isOnCurrentDesktop: Bool
     /// Current representative WindowServer id for this chip, if any. Live snapshot
     /// fact only: never persisted, never used as chip identity.
     let cgWindowID: CGWindowID?
@@ -137,6 +140,7 @@ struct StripItem: Hashable {
         self.canHide = true
         self.canClose = self.isAppLevelFallback == false
         self.isOnDesktop = representative.isOnDesktop
+        self.isOnCurrentDesktop = members.contains { $0.isOnCurrentDesktop != false }
         self.cgWindowID = representative.cgWindowID
         self.bounds = representative.bounds
         self.pid = representative.pid

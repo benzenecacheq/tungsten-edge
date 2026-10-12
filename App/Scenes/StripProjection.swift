@@ -73,6 +73,9 @@ struct StripProjection {
     /// 每个 app 在常规区**最靠左**那张卡的 entry id——未读角标只画在这一张上
     /// （一个未读数不能变成三个红点）。消息区成员不在这里：它们的角标画在区里那枚图标上。
     let badgeEntryIDByBundle: [String: String]
+    /// "Show Only Windows on This Desktop": running apps whose windows are all on other desktops.
+    /// Their pinned icons go without a running dot. Empty while the setting is off.
+    let appsRunningElsewhere: Set<String>
 
     func hasRealWindow(bundleID: String) -> Bool {
         snapshotItems.contains {

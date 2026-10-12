@@ -19,6 +19,9 @@ struct WindowRecord: Hashable, Sendable {
     /// 窗口在哪块屏（display UUID，粗粒度归属键；多屏 ④ 按它过滤窗口卡）。nil = 清单读不到位置
     /// （兜底卡、还没读到帧）——落主屏由投影层决定，这里不猜。最小化 / 隐藏期间冻结在最后可见的屏。
     var displayUUID: String?
+    /// Whether the window belongs to a desktop (Space) showing on some display right now. nil =
+    /// unknown (no window number, or SkyLight gave no Space): treated as here.
+    var isOnCurrentDesktop: Bool?
 
     init(
         id: WindowID,
@@ -31,7 +34,8 @@ struct WindowRecord: Hashable, Sendable {
         cgWindowID: CGWindowID? = nil,
         isOnDesktop: Bool = false,
         groupID: String = "",
-        displayUUID: String? = nil
+        displayUUID: String? = nil,
+        isOnCurrentDesktop: Bool? = nil
     ) {
         self.id = id
         self.appID = appID
@@ -44,6 +48,7 @@ struct WindowRecord: Hashable, Sendable {
         self.isOnDesktop = isOnDesktop
         self.groupID = groupID.isEmpty ? id.rawValue : groupID
         self.displayUUID = displayUUID
+        self.isOnCurrentDesktop = isOnCurrentDesktop
     }
 }
 

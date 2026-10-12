@@ -1080,6 +1080,32 @@ final class FinderP0Tests: XCTestCase {
         XCTAssertFalse(eligible(minimized: false), "a visible dialog still gets no card")
     }
 
+    /// AirDroid's main window, minimized: untitled and `AXDialog`. Admitted on its frame, like an
+    /// untitled standard window; a tiny or visible untitled dialog still is not.
+    func testAppTrackerEligibilityAdmitsUntitledMinimizedDialogWindows() {
+        let eligibility = AppTrackerWindowEligibility()
+        func eligible(minimized: Bool, size: CGSize = CGSize(width: 960, height: 666)) -> Bool {
+            eligibility.isEligible(
+                title: "",
+                role: kAXWindowRole as String,
+                subrole: kAXDialogSubrole as String,
+                bounds: CGRect(origin: CGPoint(x: 2423, y: 327), size: size),
+                alpha: 1,
+                isMinimized: minimized,
+                isBelowNormalLayer: false,
+                application: AppTrackerWindowEligibility.Application(
+                    bundleIdentifier: "com.sandstudio.airdroid",
+                    appName: "AirDroid",
+                    activationPolicy: .regular,
+                    executablePath: "/Applications/AirDroid.app/Contents/MacOS/AirDroid"
+                )
+            )
+        }
+        XCTAssertTrue(eligible(minimized: true))
+        XCTAssertFalse(eligible(minimized: false))
+        XCTAssertFalse(eligible(minimized: true, size: CGSize(width: 40, height: 20)))
+    }
+
     /// Widgetify's desktop widgets: `.regular`, empty title, AXStandardWindow, CG layer -20.
     func testAppTrackerEligibilityRejectsBelowNormalLayerWindowsForEveryApp() {
         let eligibility = AppTrackerWindowEligibility()

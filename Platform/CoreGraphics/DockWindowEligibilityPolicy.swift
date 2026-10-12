@@ -20,6 +20,9 @@ struct DockWindowEligibilityPolicy {
         let alpha: Double?
         let activationPolicy: NSApplication.ActivationPolicy
         let executablePath: String?
+        /// Minimized windows report `AXDialog` (see `AppTrackerWindowEligibility`), so an untitled
+        /// one passes on its frame like an untitled standard window.
+        var isMinimized: Bool = false
     }
 
     func evaluate(_ candidate: Candidate) -> Decision {
@@ -52,8 +55,9 @@ struct DockWindowEligibilityPolicy {
             if hasTitle(candidate.title) {
                 return .keep
             }
-            guard candidate.subrole == (kAXStandardWindowSubrole as String),
-                  hasMinimumFrame(candidate.bounds) else {
+            let windowSubrole = candidate.subrole == (kAXStandardWindowSubrole as String)
+                || (candidate.isMinimized && candidate.subrole == (kAXDialogSubrole as String))
+            guard windowSubrole, hasMinimumFrame(candidate.bounds) else {
                 return .filter
             }
             return .keep
@@ -157,7 +161,8 @@ struct AppTrackerWindowEligibility {
             bounds: bounds,
             alpha: alpha,
             activationPolicy: application.activationPolicy,
-            executablePath: application.executablePath
+            executablePath: application.executablePath,
+            isMinimized: isMinimized
         )
         guard policy.evaluate(candidate) == .keep else { return false }
 

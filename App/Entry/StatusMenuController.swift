@@ -83,6 +83,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     private let columnGrowthMenu = NSMenu()
     private let showShelfItem = NSMenuItem(title: String(localized: "Show Shelf"), action: #selector(toggleShowShelf), keyEquivalent: "")
     private let showTrashItem = NSMenuItem(title: String(localized: "Show Trash"), action: #selector(toggleShowTrash), keyEquivalent: "")
+    private let currentDesktopOnlyItem = NSMenuItem(title: String(localized: "Show Only Windows on This Desktop"), action: #selector(toggleCurrentDesktopOnly), keyEquivalent: "")
     private let hoverNameItem = NSMenuItem(title: String(localized: "Show app name on hover"), action: #selector(toggleHoverName), keyEquivalent: "")
     private let windowLiftItem = NSMenuItem(title: String(localized: "Keep maximized windows above the taskbar"), action: #selector(toggleWindowLift), keyEquivalent: "")
     private let nativeDockSliderView: PreferenceSliderMenuItemView
@@ -338,12 +339,14 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         taskbarScreenItem.isHidden = true
         menu.addItem(taskbarScreenItem)
 
-        // 四个开关。设置窗口里它们各带一行灰色说明，菜单里没有副标题的位置，
+        // 五个开关。设置窗口里它们各带一行灰色说明，菜单里没有副标题的位置，
         // 说明随搬家一并删除（owner 2026-09-01 拍板接受这个代价）。
         showShelfItem.target = self
         menu.addItem(showShelfItem)
         showTrashItem.target = self
         menu.addItem(showTrashItem)
+        currentDesktopOnlyItem.target = self
+        menu.addItem(currentDesktopOnlyItem)
         hoverNameItem.target = self
         menu.addItem(hoverNameItem)
         windowLiftItem.target = self
@@ -584,6 +587,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         }
         showShelfItem.state = store.showShelf ? .on : .off
         showTrashItem.state = store.showTrash ? .on : .off
+        currentDesktopOnlyItem.state = store.currentDesktopOnly ? .on : .off
         hoverNameItem.state = store.hoverStyle.isExpressive ? .on : .off
         windowLiftItem.state = store.windowLiftEnabled ? .on : .off
     }
@@ -796,6 +800,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
 
     @objc private func toggleShowTrash() {
         store.setShowTrash(!store.showTrash)
+        refreshCheckmarks()
+    }
+
+    @objc private func toggleCurrentDesktopOnly() {
+        store.setCurrentDesktopOnly(!store.currentDesktopOnly)
         refreshCheckmarks()
     }
 

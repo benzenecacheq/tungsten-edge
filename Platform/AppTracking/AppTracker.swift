@@ -1258,6 +1258,17 @@ final class AppTracker: ObservableObject {
     private func subscribeWorkspaceNotifications() {
         let nc = NSWorkspace.shared.notificationCenter
 
+        // Switching desktops changes which windows are on the current one.
+        workspaceObservers.append(nc.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.rebuildSnapshot(onScreenCGIDs: self.lastOnScreenCGIDs)
+            }
+        })
+
         workspaceObservers.append(nc.addObserver(
             forName: NSWorkspace.didLaunchApplicationNotification,
             object: nil, queue: .main
@@ -2489,6 +2500,11 @@ final class AppTracker: ObservableObject {
             apps[pid]?.lastWindowDisplayUUID = home
         }
 
+        let currentSpaceIDs = WindowSpaces.currentSpaceIDs()
+        func isOnCurrentDesktop(_ cgID: CGWindowID) -> Bool? {
+            WindowSpaces.isOnCurrentDesktop(windowNumber: Int(cgID), currentSpaceIDs: currentSpaceIDs)
+        }
+
         let xquartzServers = xquartzReadings.values
             .filter { !$0.windows.isEmpty }
             .sorted { $0.pid < $1.pid }
@@ -2533,7 +2549,8 @@ final class AppTracker: ObservableObject {
                         cgWindowID: cgID,
                         isOnDesktop: !seat.isMinimized && !app.isHidden,
                         groupID: seat.token,
-                        displayUUID: seat.displayUUID
+                        displayUUID: seat.displayUUID,
+                        isOnCurrentDesktop: isOnCurrentDesktop(cgID)
                     )
                     orderedWindowIDs.append(id)
                 }
@@ -2561,7 +2578,8 @@ final class AppTracker: ObservableObject {
                     cgWindowID: window.cgWindowID,
                     isOnDesktop: !window.isMinimized && !xquartz.isHidden,
                     groupID: id.rawValue,
-                    displayUUID: WindowDisplayAttribution.displayUUID(for: window.bounds, table: displayTable)
+                    displayUUID: WindowDisplayAttribution.displayUUID(for: window.bounds, table: displayTable),
+                    isOnCurrentDesktop: isOnCurrentDesktop(window.cgWindowID)
                 )
                 orderedWindowIDs.append(id)
             }

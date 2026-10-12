@@ -173,14 +173,14 @@ enum XQuartzWindowReader {
         guard let info = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else {
             return []
         }
-        let current = XQuartzSpaces.currentSpaceIDs()
+        let current = WindowSpaces.currentSpaceIDs()
         let appKitWindowIDs = axWindowIDs(pid: pid)
         return info.compactMap { entry in
             guard (entry[kCGWindowOwnerPID as String] as? Int).map(pid_t.init) == pid,
                   entry[kCGWindowLayer as String] as? Int == 0,
                   let number = entry[kCGWindowNumber as String] as? Int else { return nil }
             let title = entry[kCGWindowName as String] as? String ?? ""
-            let spaces = XQuartzSpaces.spaceIDs(forWindowNumber: number)
+            let spaces = WindowSpaces.spaceIDs(forWindowNumber: number)
             let bounds = (entry[kCGWindowBounds as String] as? NSDictionary)
                 .flatMap { CGRect(dictionaryRepresentation: $0) }
             return XQuartzCGWindow(
@@ -245,10 +245,11 @@ enum XQuartzWindowReader {
     }
 }
 
-/// The two SkyLight reads the inventory needs, loaded here rather than borrowed from
-/// `FullscreenIntentMonitor` because this file is also built into window-lab, which does not
-/// include it. Same symbols and masks as `ManagedSpaceLayoutReader` / `WindowSpaceMembershipReader`.
-private enum XQuartzSpaces {
+/// The SkyLight Space reads the XQuartz inventory and `AppTracker` need, loaded here rather than
+/// borrowed from `FullscreenIntentMonitor` because this file is also built into window-lab, which
+/// does not include it. Same symbols and masks as `ManagedSpaceLayoutReader` /
+/// `WindowSpaceMembershipReader`.
+enum WindowSpaces {
     private typealias MainConnectionIDFn = @convention(c) () -> Int32
     private typealias CopyManagedDisplaySpacesFn = @convention(c) (Int32) -> CFArray?
     private typealias CopySpacesForWindowsFn = @convention(c) (Int32, Int32, CFArray) -> CFArray?
@@ -279,6 +280,13 @@ private enum XQuartzSpaces {
               let raw = symbols.forWindows(symbols.cid, 0x7, [NSNumber(value: number)] as CFArray) as? [NSNumber]
         else { return [] }
         return raw.map(\.intValue)
+    }
+
+    /// Whether the window belongs to one of `currentSpaceIDs`; nil when either side is unknown.
+    static func isOnCurrentDesktop(windowNumber: Int, currentSpaceIDs: Set<Int>) -> Bool? {
+        guard !currentSpaceIDs.isEmpty else { return nil }
+        let spaces = spaceIDs(forWindowNumber: windowNumber)
+        return spaces.isEmpty ? nil : !currentSpaceIDs.isDisjoint(with: spaces)
     }
 }
 

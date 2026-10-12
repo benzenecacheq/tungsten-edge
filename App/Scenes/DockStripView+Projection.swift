@@ -135,6 +135,33 @@ extension DockStripView {
         if HoverTrace.isEnabled, dragController.carriedPayload != nil {
             HoverTrace.liveOrder(orderedLive.map(\.id))
         }
+        // Show Only Windows on This Desktop: after the order layer, by the display filter's rule, so
+        // cards on other desktops keep their places. A kept app with every window elsewhere keeps
+        // its icon (Finder excepted: its kept entry is the fallback card, see the placeholders above).
+        let currentDesktopOnly = settingsStore.currentDesktopOnly
+        let desktopLive: [StripEntry] = {
+            guard currentDesktopOnly else { return orderedLive }
+            let placeholderBundleIDs = Set(keptIDs.filter { bid in
+                !drawerStore.contains(bid) && !msgSet.contains(bid) && !FinderTaskbarPolicy.isFinder(bid)
+            })
+            let cards = orderedLive.map { entry -> CurrentDesktopFilter.Card in
+                guard case let .window(item) = entry, !item.isAppLevelFallback else { return .other(id: entry.id) }
+                return .window(id: entry.id, bundleID: item.bundleIdentifier,
+                               isOnCurrentDesktop: item.isOnCurrentDesktop)
+            }
+            return CurrentDesktopFilter.filter(cards, keptBundleIDs: placeholderBundleIDs).compactMap { rendered in
+                switch rendered {
+                case let .card(id): return byID[id]
+                case let .keptPlaceholder(bid): return .keptApp(bundleID: bid)
+                }
+            }
+        }()
+        let appsRunningElsewhere = !currentDesktopOnly ? [] : CurrentDesktopFilter.appsRunningElsewhere(
+            windows: snapshotItems.compactMap { item in
+                guard !item.isAppLevelFallback, let bid = item.bundleIdentifier else { return nil }
+                return (bid, item.isOnCurrentDesktop)
+            }
+        )
         // 多屏 ④：按屏过滤**只在这里、只在顺序层之后**。上面喂给 `reconciled` 的 `liveOrderIDs` 和
         // `reconcileLiveOrder` 喂给 `sync` 的都是全集——各屏一致，共享顺序层才不会把别的屏的卡
         // 打成缺席（5s 后踢出记忆）、拖动重排也不会当帧截断。启动器类（保留占位、`app-*` 兜底卡、
@@ -153,7 +180,7 @@ extension DockStripView {
         let claimedStrip = dragController.activeStripSurfaceID
         // 有运行圆点但没窗口的（应用级兜底卡、在运行却只剩占位的保留应用）只落主屏；
         // 没运行的占位是纯启动器，每屏都在（owner 2026-09-02：有圆点 = 只在一条上）。
-        let renderedLive = orderedLive.filter { entry in
+        let renderedLive = desktopLive.filter { entry in
             let subject: StripDisplayFilter.Subject
             switch entry {
             case let .window(item):
@@ -236,12 +263,28 @@ extension DockStripView {
         // Folders sit at the bar's tail in one zone with the Trash, as on the native Dock: no
         // divider between them.
         // Pinned to the taskbar instead, the Apps entry still goes first on a side edge.
-        let headTiles = !taskbarEdge.isVertical ? messaging
-            : messaging.filter { $0.id == "msg-app-\(appsLauncherID)" } + messaging.filter { $0.id != "msg-app-\(appsLauncherID)" }
+        // When only this desktop's windows show, a tile whose window is on another desktop takes
+        // the app's first window here instead (drawn as the tile, not after it), or else draws as
+        // the app icon (no dot, see `appsRunningElsewhere`). Rendering only, like `pinnedWindows`.
+        var promotedWindowIDs = Set<String>()
+        let shownMessaging = !currentDesktopOnly ? messaging : messaging.map { tile -> StripEntry in
+            guard case let .messagingApp(bid, main?) = tile, !main.isOnCurrentDesktop else { return tile }
+            let here = pinnedWindows.lazy.compactMap { entry -> StripItem? in
+                guard case let .window(item) = entry, item.bundleIdentifier == bid else { return nil }
+                return item
+            }.first
+            if let here { promotedWindowIDs.insert(here.id) }
+            return .messagingApp(bundleID: bid, mainWindow: here)
+        }
+        let headTiles = !taskbarEdge.isVertical ? shownMessaging
+            : shownMessaging.filter { $0.id == "msg-app-\(appsLauncherID)" }
+                + shownMessaging.filter { $0.id != "msg-app-\(appsLauncherID)" }
         let headEntries = headLaunchers + headTiles.flatMap { tile -> [StripEntry] in
             guard case let .messagingApp(bid, _) = tile else { return [tile] }
             return [tile] + pinnedWindows.filter { entry in
-                if case let .window(item) = entry { return item.bundleIdentifier == bid }
+                if case let .window(item) = entry {
+                    return item.bundleIdentifier == bid && !promotedWindowIDs.contains(item.id)
+                }
                 return false
             }
         } + (settingsStore.showShelf ? [StripEntry.shelf] : [])
@@ -324,7 +367,8 @@ extension DockStripView {
             messagingIDs: messagingIDs,
             pinnedWindowIDs: pinnedWindowIDs,
             draggingID: draggingID,
-            badgeEntryIDByBundle: badgeEntryIDByBundle
+            badgeEntryIDByBundle: badgeEntryIDByBundle,
+            appsRunningElsewhere: appsRunningElsewhere
         )
     }
 

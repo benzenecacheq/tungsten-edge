@@ -1631,6 +1631,7 @@ struct DockStripView: View {
                                  ),
                                  badgeText: badge,
                                  slotHidden: draggingMessagingBundleID == bid,
+                                 hidesRunningDot: projection.appsRunningElsewhere.contains(bid),
                                  onTap: running
                                     ? { Self.messagingFallbackTap(bundleID: bid,
                                                                   hasRealWindow: projection.hasRealWindow(bundleID: bid)) }
@@ -1667,6 +1668,7 @@ struct DockStripView: View {
                 badgeText: projection.badgeEntryIDByBundle[bid] == entry.id
                     ? badgeStore.badgesByBundleID[bid] : nil,
                 slotHidden: projection.draggingID == "app-\(bid)",
+                hidesRunningDot: projection.appsRunningElsewhere.contains(bid),
                 onTap: reopen,
                 onLaunch: { runtime.beginLaunch(bid) }
             )

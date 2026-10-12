@@ -151,6 +151,14 @@ extension PanelCoordinator {
                 if self.folderPopupWantsOpen, self.openPopupContent == .trash { self.closeFolderPopup() }
                 DispatchQueue.main.async { [weak self] in self?.relayout(animated: true) }
             }
+        // Show Only Windows on This Desktop adds or drops cards: resize as for the shelf / trash.
+        currentDesktopOnlySubscription = settingsStore.$currentDesktopOnly
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { [weak self] in self?.relayout(animated: true) }
+            }
         // Moving the bar to another edge re-shapes every panel: run it as a height change does
         // (retire popups, drawer, drag and tooltip, then one instant relayout), and let the hover
         // monitors re-arm for the new edge. dropFirst — `setupDockPanel` read the stored edge.
