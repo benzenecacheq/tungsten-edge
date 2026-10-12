@@ -1531,19 +1531,22 @@ struct DockStripView: View {
                      badgeText: windowBadge,
                      slotHidden: projection.draggingID == item.id)
         case .divider:
+            // Every divider takes the room Divider Space sets (at least the original gap).
+            let sidePadding = max((CGFloat(settingsStore.dividerSpace) - 1) / 2 - Style.chipSpacing,
+                                  Style.dividerSidePadding)
             if taskbarEdge.isVertical {
                 // Turned to run across the column, centred on the icon cards' line.
                 Rectangle()
                     .fill(theme.zoneDivider.color)
                     .frame(width: Style.dividerHeight * dockScale, height: 1)
-                    .padding(.vertical, Style.dividerSidePadding * dockScale)
+                    .padding(.vertical, sidePadding * dockScale)
                     .padding(.horizontal, (ChipPillMetrics.cardWidth - Style.dividerHeight) / 2 * dockScale)
             } else {
                 Rectangle()
                     .fill(theme.zoneDivider.color)
                     // 宽度是发丝线，恒 1pt 不缩；只有高度跟着档位走。
                     .frame(width: 1, height: Style.dividerHeight * dockScale)
-                    .padding(.horizontal, Style.dividerSidePadding * dockScale)
+                    .padding(.horizontal, sidePadding * dockScale)
             }
         case let .pinnedFolder(path):
             let index = 1 + (pinnedFolderStore.folderPaths.firstIndex(of: path) ?? 0)

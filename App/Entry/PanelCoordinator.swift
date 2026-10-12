@@ -197,6 +197,7 @@ final class PanelCoordinator: NSObject {
     var showShelfSubscription: AnyCancellable?
     var showTrashSubscription: AnyCancellable?
     var currentDesktopOnlySubscription: AnyCancellable?
+    var dividerSpaceSubscription: AnyCancellable?
     var dockPanelHeightSubscription: AnyCancellable?
     var taskbarEdgeSubscription: AnyCancellable?
     var taskbarBackgroundOpacitySubscription: AnyCancellable?

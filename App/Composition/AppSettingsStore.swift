@@ -161,6 +161,10 @@ final class AppSettingsStore: ObservableObject {
     /// Where a side-edge column sits between the top (0) and the bottom (1) of the screen; 0.5 =
     /// centred. Steps of 5%.
     @Published private(set) var columnVerticalPosition: Double
+    /// Room every divider (between zones, and Divider After between pinned tiles) takes along
+    /// the bar, in points at the native size. The lowest is the original zone divider gap
+    /// (`StripContextMenuZone.dividerGapWidth`, the least the grip's gap test accepts).
+    @Published private(set) var dividerSpace: Double
     /// Which end of a side-edge column stays at `columnVerticalPosition` as it changes length.
     @Published private(set) var columnGrowth: ColumnGrowth
 
@@ -274,6 +278,8 @@ final class AppSettingsStore: ObservableObject {
             Self.storedNumericValue(defaults.object(forKey: Keys.columnLabelFontSize)) ?? Self.defaultColumnLabelFontSize)
         columnWidthAdjustment = Self.clampedColumnWidthAdjustment(
             Self.storedNumericValue(defaults.object(forKey: Keys.columnWidthAdjustment)) ?? 0)
+        dividerSpace = Self.clampedDividerSpace(
+            Self.storedNumericValue(defaults.object(forKey: Keys.dividerSpace)) ?? Self.defaultDividerSpace)
         columnVerticalPosition = Self.clampedColumnVerticalPosition(
             Self.storedNumericValue(defaults.object(forKey: Keys.columnVerticalPosition)) ?? 0.5)
         columnGrowth = ColumnGrowth(rawValue: defaults.string(forKey: Keys.columnGrowth) ?? "") ?? .default
@@ -363,6 +369,21 @@ final class AppSettingsStore: ObservableObject {
     static func clampedBackgroundOpacity(_ value: Double) -> Double {
         guard value.isFinite else { return TaskbarBackgroundOpacity.designed }
         return min(max((value * 20).rounded() / 20, 0), 1)
+    }
+
+    static let dividerSpaceRange: ClosedRange<Double> = Double(StripContextMenuZone.dividerGapWidth)...61
+    static let defaultDividerSpace: Double = 25
+
+    static func clampedDividerSpace(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultDividerSpace }
+        return min(max(value.rounded(), dividerSpaceRange.lowerBound), dividerSpaceRange.upperBound)
+    }
+
+    func setDividerSpace(_ value: Double) {
+        let clamped = Self.clampedDividerSpace(value)
+        guard dividerSpace != clamped else { return }
+        dividerSpace = clamped
+        defaults.set(clamped, forKey: Keys.dividerSpace)
     }
 
     static let columnLabelFontSizeRange: ClosedRange<Double> = 10...22
@@ -699,6 +720,7 @@ private enum Keys {
     static let columnLabelFontSize = "com.tungsten.edge.columnLabelFontSize"
     static let columnWidthAdjustment = "com.tungsten.edge.columnWidthAdjustment"
     static let columnVerticalPosition = "com.tungsten.edge.columnVerticalPosition"
+    static let dividerSpace = "com.tungsten.edge.dividerSpace"
     static let columnGrowth = "com.tungsten.edge.columnGrowth"
     /// 固定屏身份（字典：uuid / name）。切回 followMouse 时保留不删。
     static let taskbarScreenPinned = "com.tungsten.edge.taskbarScreen.pinned"

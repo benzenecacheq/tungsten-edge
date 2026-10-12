@@ -36,6 +36,9 @@ enum StripEntry: Identifiable, Hashable {
     /// 再画一份就是两个图标；原生 Dock 同样是「系统拖影 + 空档」。
     case externalDropGhost(key: String)
 
+    /// Id of the divider after a pinned tile (`MessagingAppStore.dividerAfterIDs`).
+    static func pinnedDividerID(after bundleID: String) -> String { "pinned-divider-\(bundleID)" }
+
     var id: String {
         switch self {
         case let .window(item): return item.id

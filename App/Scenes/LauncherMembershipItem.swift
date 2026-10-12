@@ -39,6 +39,22 @@ extension LauncherMembershipItem {
                     }
                 }
             }
-        }
+        } + pinnedDividerItems(surface: surface, bundleID: bundleID, isMessaging: isMessaging,
+                               controller: controller)
+    }
+
+    /// Pinned tiles on the bar can carry a divider after them.
+    @MainActor
+    private static func pinnedDividerItems(
+        surface: AppMembershipMenuPlan.Surface,
+        bundleID: String,
+        isMessaging: Bool,
+        controller: AppMembershipController
+    ) -> [LauncherMembershipItem] {
+        guard surface == .strip, isMessaging else { return [] }
+        let isChecked = controller.hasPinnedDivider(after: bundleID)
+        return [LauncherMembershipItem(label: String(localized: "Divider After"), isChecked: isChecked) {
+            controller.setPinnedDivider(after: bundleID, enabled: !isChecked)
+        }]
     }
 }

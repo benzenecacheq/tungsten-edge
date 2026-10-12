@@ -22,6 +22,15 @@ final class AppMembershipController: ObservableObject {
         self.messagingStore = messagingStore
     }
 
+    func hasPinnedDivider(after bundleID: String) -> Bool {
+        messagingStore.hasDivider(after: bundleID)
+    }
+
+    /// A divider right after this pinned app's tile (and the windows drawn with it).
+    func setPinnedDivider(after bundleID: String, enabled: Bool) {
+        messagingStore.setDivider(after: bundleID, enabled: enabled)
+    }
+
     /// Native check-menu toggle. It never changes placement. Kept may coexist with
     /// messaging identity under the unified model.
     func setKept(_ bundleID: String, enabled: Bool) {

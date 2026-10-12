@@ -70,7 +70,8 @@ extension PanelCoordinator {
     }
 
     func subscribeMessagingStoreWidth() {
-        messagingStoreWidthSubscription = messagingStore.$bundleIDs
+        messagingStoreWidthSubscription = messagingStore.$bundleIDs.map { _ in () }
+            .merge(with: messagingStore.$dividerAfterIDs.map { _ in () })
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 DispatchQueue.main.async { [weak self] in
@@ -150,6 +151,13 @@ extension PanelCoordinator {
                 guard let self else { return }
                 if self.folderPopupWantsOpen, self.openPopupContent == .trash { self.closeFolderPopup() }
                 DispatchQueue.main.async { [weak self] in self?.relayout(animated: true) }
+            }
+        dividerSpaceSubscription = settingsStore.$dividerSpace
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { [weak self] in self?.relayout(animated: false) }
             }
         // Show Only Windows on This Desktop adds or drops cards: resize as for the shelf / trash.
         currentDesktopOnlySubscription = settingsStore.$currentDesktopOnly

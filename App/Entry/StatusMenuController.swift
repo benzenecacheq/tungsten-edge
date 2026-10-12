@@ -101,6 +101,11 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         accessibilityTitle: String(localized: "Label Size"), range: AppSettingsStore.columnLabelFontSizeRange,
         snap: AppSettingsStore.clampedColumnLabelFontSize,
         format: { "\(Int($0))" })
+    private let dividerSpaceSectionItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let dividerSpaceSliderView = ValueSliderMenuItemView(
+        accessibilityTitle: String(localized: "Divider Space"), range: AppSettingsStore.dividerSpaceRange,
+        snap: AppSettingsStore.clampedDividerSpace,
+        format: { "\(Int($0))" })
     private let verticalPositionSectionItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let verticalPositionSliderView = ValueSliderMenuItemView(
         accessibilityTitle: String(localized: "Vertical Position"), range: 0...1,
@@ -272,6 +277,17 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         let labelSizeItem = NSMenuItem()
         labelSizeItem.view = labelSizeSliderView
         menu.addItem(labelSizeItem)
+
+        // Room around every divider: between zones and between pinned tiles (Divider After).
+        dividerSpaceSectionItem.attributedTitle = Self.sectionTitle(String(localized: "Divider Space"))
+        dividerSpaceSectionItem.isEnabled = false
+        menu.addItem(dividerSpaceSectionItem)
+        dividerSpaceSliderView.onValueChange = { [weak store] space in
+            store?.setDividerSpace(space)
+        }
+        let dividerSpaceItem = NSMenuItem()
+        dividerSpaceItem.view = dividerSpaceSliderView
+        menu.addItem(dividerSpaceItem)
 
         // Where a side-edge column sits, top to bottom.
         verticalPositionSectionItem.attributedTitle = Self.sectionTitle(String(localized: "Vertical Position"))
@@ -455,6 +471,7 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
         backgroundOpacitySliderView.sync(value: store.taskbarBackgroundOpacity)
         labelSizeSliderView.sync(value: store.columnLabelFontSize)
         verticalPositionSliderView.sync(value: store.columnVerticalPosition)
+        dividerSpaceSliderView.sync(value: store.dividerSpace)
         refreshEdgeSectionTitle()
         rebuildTaskbarScreenMenu()
     }

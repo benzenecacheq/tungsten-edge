@@ -17,6 +17,20 @@ final class MessagingAppStoreTests: XCTestCase {
         return store
     }
 
+    // MARK: - dividers
+
+    func testDividerPersistsAndFollowsUnpin() {
+        let defaults = makeDefaults()
+        let store = makeStore(["a", "b"], defaults: defaults)
+        store.setDivider(after: "a", enabled: true)
+        XCTAssertTrue(MessagingAppStore(defaults: defaults).hasDivider(after: "a"))
+        store.reorder(draggedID: "a", relativeTo: "b", after: true)
+        XCTAssertTrue(store.hasDivider(after: "a"), "the divider moves with its app")
+        store.unmark("a")
+        XCTAssertFalse(store.hasDivider(after: "a"))
+        XCTAssertFalse(MessagingAppStore(defaults: defaults).hasDivider(after: "a"))
+    }
+
     // MARK: - reorder
 
     func testReorderBeforeAndAfterTarget() {

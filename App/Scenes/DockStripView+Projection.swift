@@ -279,14 +279,19 @@ extension DockStripView {
         let headTiles = !taskbarEdge.isVertical ? shownMessaging
             : shownMessaging.filter { $0.id == "msg-app-\(appsLauncherID)" }
                 + shownMessaging.filter { $0.id != "msg-app-\(appsLauncherID)" }
+        // A divider the user put after a pinned tile; none after the zone's last cell, where the
+        // zone's own divider already is (the Shelf, when shown, comes after every tile).
+        let lastTileID = settingsStore.showShelf ? nil : headTiles.last?.id
         let headEntries = headLaunchers + headTiles.flatMap { tile -> [StripEntry] in
             guard case let .messagingApp(bid, _) = tile else { return [tile] }
+            let divider: [StripEntry] = tile.id != lastTileID && messagingStore.hasDivider(after: bid)
+                ? [.divider(id: StripEntry.pinnedDividerID(after: bid))] : []
             return [tile] + pinnedWindows.filter { entry in
                 if case let .window(item) = entry {
                     return item.bundleIdentifier == bid && !promotedWindowIDs.contains(item.id)
                 }
                 return false
-            }
+            } + divider
         } + (settingsStore.showShelf ? [StripEntry.shelf] : [])
         let tailEntries = pinnedEntries + (settingsStore.showTrash ? [StripEntry.trash] : [])
         var zones = [headEntries, liveWithGhost, tailEntries]

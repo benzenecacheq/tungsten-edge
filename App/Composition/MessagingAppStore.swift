@@ -24,7 +24,11 @@ import Foundation
 @MainActor
 final class MessagingAppStore: ObservableObject {
     @Published private(set) var bundleIDs: [String] = []
+    /// Pinned apps followed by a divider in the zone. Keyed by the app, so the divider moves
+    /// with it when the tiles are reordered.
+    @Published private(set) var dividerAfterIDs: Set<String> = []
     private var optOutIDs: Set<String> = []
+    private let dividerKey = "messagingDividerAfterBundleIDs"
     private let key = "messagingBundleIDsV2"
     private let optOutKey = "messagingOptOutBundleIDsV2"
     private let legacyKey = "messagingBundleIDs"
@@ -76,6 +80,15 @@ final class MessagingAppStore: ObservableObject {
             optOutIDs = Set(defaults.stringArray(forKey: legacyOptOutKey) ?? [])
             defaults.set(Array(optOutIDs), forKey: optOutKey)
         }
+        dividerAfterIDs = Set(defaults.stringArray(forKey: dividerKey) ?? [])
+    }
+
+    func hasDivider(after id: String) -> Bool { dividerAfterIDs.contains(id) }
+
+    func setDivider(after id: String, enabled: Bool) {
+        guard !id.isEmpty, hasDivider(after: id) != enabled else { return }
+        if enabled { dividerAfterIDs.insert(id) } else { dividerAfterIDs.remove(id) }
+        defaults.set(dividerAfterIDs.sorted(), forKey: dividerKey)
     }
 
     func contains(_ id: String) -> Bool { bundleIDs.contains(id) }
@@ -113,6 +126,7 @@ final class MessagingAppStore: ObservableObject {
     func unmark(_ id: String) {
         bundleIDs.removeAll { $0 == id }
         optOutIDs.insert(id)
+        setDivider(after: id, enabled: false)
         persist()
         persistOptOut()
     }
