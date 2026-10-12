@@ -17,9 +17,14 @@ import Foundation
 /// one of several identical `user@host` xterms raise exactly that window.
 enum XQuartzWindowRules {
     static let bundleIdentifier = "org.xquartz.X11"
+    /// Extra X servers run from renamed copies of XQuartz.app (`~/bin/xdesk`: one server per
+    /// desktop, since macOS 27 keeps each server's windows on the desktop it started on).
+    static let copyBundleIdentifierPrefix = "org.xquartz.X11.display"
 
     static func isXQuartz(bundleIdentifier: String?) -> Bool {
-        bundleIdentifier == Self.bundleIdentifier
+        guard let bundleIdentifier else { return false }
+        return bundleIdentifier == Self.bundleIdentifier
+            || bundleIdentifier.hasPrefix(Self.copyBundleIdentifierPrefix)
     }
 }
 
@@ -111,40 +116,50 @@ enum XQuartzWindowReader {
 
     struct Reading: Equatable, Sendable {
         let pid: pid_t
+        let bundleIdentifier: String
         let isHidden: Bool
         let windows: [XQuartzWindow]
     }
 
-    /// LaunchServices lists XQuartz (started by launchd's startx) with pid -1, so when the bundle
-    /// lookup has no real pid, find the process running the same executable.
-    static func runningPID() -> pid_t? {
-        let entries = NSRunningApplication.runningApplications(withBundleIdentifier: XQuartzWindowRules.bundleIdentifier)
-            .filter { !$0.isTerminated }
-        if let pid = entries.first(where: { $0.processIdentifier > 0 })?.processIdentifier { return pid }
-        guard let executable = entries.first?.executableURL?.resolvingSymlinksInPath().path else { return nil }
-        return pid(runningExecutable: executable)
+    struct Server: Equatable, Sendable {
+        let pid: pid_t
+        let bundleIdentifier: String
     }
 
-    private static func pid(runningExecutable executable: String) -> pid_t? {
+    /// Every running XQuartz server process: XQuartz itself and any renamed copies. Found by
+    /// executable rather than through LaunchServices, which lists XQuartz (started by launchd's
+    /// startx) with pid -1 and may not list a copy started straight from its binary at all.
+    static func runningServers() -> [Server] {
         let capacity = Int(proc_listallpids(nil, 0)) + 64
-        guard capacity > 64 else { return nil }
+        guard capacity > 64 else { return [] }
         var pids = [pid_t](repeating: 0, count: capacity)
         let count = Int(proc_listallpids(&pids, Int32(capacity * MemoryLayout<pid_t>.size)))
         var path = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
+        var servers: [Server] = []
         for pid in pids.prefix(max(0, count)) where pid > 0 {
             guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { continue }
-            if String(cString: path) == executable { return pid }
+            let executable = String(cString: path)
+            guard executable.hasSuffix(".app/Contents/MacOS/X11.bin"),
+                  let bundleID = bundleIdentifier(ofExecutable: executable),
+                  XQuartzWindowRules.isXQuartz(bundleIdentifier: bundleID) else { continue }
+            servers.append(Server(pid: pid, bundleIdentifier: bundleID))
         }
-        return nil
+        return servers
+    }
+
+    private static func bundleIdentifier(ofExecutable executable: String) -> String? {
+        let contents = URL(fileURLWithPath: executable).deletingLastPathComponent().deletingLastPathComponent()
+        let plist = NSDictionary(contentsOf: contents.appendingPathComponent("Info.plist"))
+        return plist?["CFBundleIdentifier"] as? String
     }
 
     /// nil when the Window menu cannot be read (XQuartz busy, launching, or AX not granted):
     /// callers keep their previous reading rather than dropping every card.
-    static func read(pid: pid_t) -> Reading? {
-        guard let items = windowMenuItems(pid: pid),
-              let windows = windows(pid: pid, menuItems: items) else { return nil }
-        let isHidden = NSRunningApplication(processIdentifier: pid)?.isHidden ?? false
-        return Reading(pid: pid, isHidden: isHidden, windows: windows)
+    static func read(_ server: Server) -> Reading? {
+        guard let items = windowMenuItems(pid: server.pid),
+              let windows = windows(pid: server.pid, menuItems: items) else { return nil }
+        let isHidden = NSRunningApplication(processIdentifier: server.pid)?.isHidden ?? false
+        return Reading(pid: server.pid, bundleIdentifier: server.bundleIdentifier, isHidden: isHidden, windows: windows)
     }
 
     static func windows(pid: pid_t, menuItems: [MenuItem]) -> [XQuartzWindow]? {

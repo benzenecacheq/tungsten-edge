@@ -111,7 +111,8 @@ final class AppTracker: ObservableObject {
     /// XQuartz 的 X 窗口不在 AX 里（`XQuartzWindowInventory`）：独立 1s 轮询 CG + 它的 Window 菜单，
     /// 读数并进快照，一扇 X 窗口一张卡。
     private var xquartzPollTimer: Timer?
-    private var xquartzReading: XQuartzWindowReader.Reading?
+    /// One reading per running XQuartz server (XQuartz itself plus `xdesk`'s per-desktop copies).
+    private var xquartzReadings: [pid_t: XQuartzWindowReader.Reading] = [:]
     private var xquartzReadInFlight = false
     private var isScanningCandidates = false
     /// Per-pid retry task asking whether a freshly seatless process is still `.regular`
@@ -1968,28 +1969,22 @@ final class AppTracker: ObservableObject {
     /// The Window menu read is AX into XQuartz, so it runs off the main actor; one read in flight.
     private func pollXQuartzWindows() {
         guard AXIsProcessTrusted(), !xquartzReadInFlight else { return }
-        guard let pid = XQuartzWindowReader.runningPID() else {
-            if xquartzReading != nil {
-                xquartzReading = nil
-                rebuildSnapshot()
-            }
-            return
-        }
         xquartzReadInFlight = true
         DispatchQueue.global(qos: .utility).async {
-            let reading = XQuartzWindowReader.read(pid: pid)
-            Task { @MainActor [weak self] in self?.landXQuartzReading(reading, pid: pid) }
+            let servers = XQuartzWindowReader.runningServers()
+            let readings = servers.map { ($0.pid, XQuartzWindowReader.read($0)) }
+            Task { @MainActor [weak self] in self?.landXQuartzReadings(readings) }
         }
     }
 
-    private func landXQuartzReading(_ reading: XQuartzWindowReader.Reading?, pid: pid_t) {
+    private func landXQuartzReadings(_ readings: [(pid: pid_t, reading: XQuartzWindowReader.Reading?)]) {
         xquartzReadInFlight = false
-        if let reading {
-            xquartzReading = reading
-        } else if xquartzReading?.pid != pid {
-            // Unreadable menu: keep the last reading of this same process, never a stale pid's.
-            xquartzReading = nil
+        var next: [pid_t: XQuartzWindowReader.Reading] = [:]
+        for (pid, reading) in readings {
+            // Unreadable menu: keep this process's last reading rather than drop its cards.
+            if let kept = reading ?? xquartzReadings[pid] { next[pid] = kept }
         }
+        xquartzReadings = next
         // Rebuild every landing, not only on a changed reading: the front window's status also
         // follows the frontmost app, and an unchanged snapshot is not republished.
         rebuildSnapshot()
@@ -2485,14 +2480,17 @@ final class AppTracker: ObservableObject {
             apps[pid]?.lastWindowDisplayUUID = home
         }
 
-        let xquartz = xquartzReading.flatMap { $0.windows.isEmpty ? nil : $0 }
+        let xquartzServers = xquartzReadings.values
+            .filter { !$0.windows.isEmpty }
+            .sorted { $0.pid < $1.pid }
+        let xquartzPIDs = Set(xquartzServers.map(\.pid))
 
         for pid in appOrder {
             guard let app = apps[pid] else { continue }
 
             if app.windowOrder.isEmpty {
                 // XQuartz with X windows: those windows are its cards (below), not the app card.
-                if pid == xquartz?.pid { continue }
+                if xquartzPIDs.contains(pid) { continue }
                 guard let fallback = fallbackByPID[pid] else { continue }
                 let id = WindowID(rawValue: fallback.windowID)
                 windows[id] = WindowRecord(
@@ -2533,8 +2531,8 @@ final class AppTracker: ObservableObject {
             }
         }
 
-        if let xquartz {
-            let bundleID = XQuartzWindowRules.bundleIdentifier
+        for xquartz in xquartzServers {
+            let bundleID = xquartz.bundleIdentifier
             for window in xquartz.windows {
                 let id = WindowID(rawValue: "cgw-\(window.cgWindowID)")
                 windows[id] = WindowRecord(
