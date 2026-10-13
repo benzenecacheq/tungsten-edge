@@ -50,7 +50,7 @@ extension PanelCoordinator {
             },
             onRequestTaskbarMenu: { [weak self] event, view in
                 self?.prepareResizeCursorForMenu()
-                self?.onRequestTaskbarMenu?(event, view)
+                self?.onRequestTaskbarMenu?(event, view, [])
             },
             onInteractiveResize: { [weak self] event in
                 switch event {
@@ -184,13 +184,16 @@ extension PanelCoordinator {
         )
         configurePanel(panel, backgroundColor: NSColor(white: 1.0, alpha: 0.0), appliesLevelOverride: true)
         let hosting = NSHostingView(rootView:
-            DrawerCapsuleButton(
-                onRequestTaskbarMenu: { [weak self] event, view in
-                    self?.onRequestTaskbarMenu?(event, view)
+            DrawerCapsuleStack(
+                onRequestMenu: { [weak self] event, view, drawerID in
+                    self?.showDrawerCapsuleMenu(event: event, view: view, drawerID: drawerID)
                 },
                 usesLiquidGlass: usesLiquidGlass,
-                action: { [weak self] in self?.toggleDrawer() },
-                onPrimaryAction: { [weak self] in self?.closeDrawerAfterAction() }
+                action: { [weak self] drawerID in self?.toggleDrawer(drawerID) },
+                onPrimaryAction: { [weak self] in self?.closeDrawerAfterAction() },
+                onHoverChanged: { [weak self] drawerID, hovering in
+                    self?.drawerCapsuleHoverChanged(drawerID, hovering: hovering)
+                }
             )
                 .environmentObject(runtime)
                 .environmentObject(drawerStore)

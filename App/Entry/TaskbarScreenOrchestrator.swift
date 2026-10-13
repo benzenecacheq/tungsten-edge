@@ -47,7 +47,7 @@ final class TaskbarScreenOrchestrator: NSObject, WindowLiftAvoidanceHost {
     var onAddFolder: () -> Void = {} {
         didSet { units.forEach { $0.coordinator.onAddFolder = onAddFolder } }
     }
-    var onRequestTaskbarMenu: ((NSEvent, NSView) -> Void)? {
+    var onRequestTaskbarMenu: ((NSEvent, NSView, [NSMenuItem]) -> Void)? {
         didSet { units.forEach { $0.coordinator.onRequestTaskbarMenu = onRequestTaskbarMenu } }
     }
 

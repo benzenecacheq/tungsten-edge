@@ -372,6 +372,7 @@
 		A0000000000000000000101E /* FinderWindowRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000055 /* FinderWindowRules.swift */; };
 		A0000000000000000000101F /* FinderP0Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000058 /* FinderP0Tests.swift */; };
 		B7ABF8240B55C046448D2651 /* XQuartzWindowInventoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B78E9ADC63124FEF04F100A6 /* XQuartzWindowInventoryTests.swift */; };
+		B72584CA35EC2E32AA864F3B /* NamedDrawerStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7712F40AFE349AEA06B1FC9 /* NamedDrawerStoreTests.swift */; };
 		B717BB843A04FE580BD04A10 /* DesktopIconPlacementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7AFFDF23F4E4CECDAEF337C /* DesktopIconPlacementTests.swift */; };
 		B71ADA02379B5CCD33FE20EA /* CurrentDesktopFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E53BB28E43E19D3D11DD2A /* CurrentDesktopFilterTests.swift */; };
 		A00000000000000000001020 /* Identifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000006 /* Identifiers.swift */; };
@@ -784,6 +785,7 @@
 		A00000000000000000000019 /* window-lab */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "window-lab"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000000000000000058 /* FinderP0Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderP0Tests.swift; sourceTree = "<group>"; };
 		B78E9ADC63124FEF04F100A6 /* XQuartzWindowInventoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XQuartzWindowInventoryTests.swift; sourceTree = "<group>"; };
+		B7712F40AFE349AEA06B1FC9 /* NamedDrawerStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NamedDrawerStoreTests.swift; sourceTree = "<group>"; };
 		B7AFFDF23F4E4CECDAEF337C /* DesktopIconPlacementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopIconPlacementTests.swift; sourceTree = "<group>"; };
 		B7E53BB28E43E19D3D11DD2A /* CurrentDesktopFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentDesktopFilterTests.swift; sourceTree = "<group>"; };
 		A00000000000000000008040 /* AppSettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStoreTests.swift; sourceTree = "<group>"; };
@@ -1404,6 +1406,7 @@
 				C20000000000000000000011 /* RunningStateSweepDecisionTests.swift */,
 				A00000000000000000000058 /* FinderP0Tests.swift */,
 				B78E9ADC63124FEF04F100A6 /* XQuartzWindowInventoryTests.swift */,
+				B7712F40AFE349AEA06B1FC9 /* NamedDrawerStoreTests.swift */,
 				B7AFFDF23F4E4CECDAEF337C /* DesktopIconPlacementTests.swift */,
 				B7E53BB28E43E19D3D11DD2A /* CurrentDesktopFilterTests.swift */,
 				A0000000000000000000B060 /* PermissionOnboardingTests.swift */,
@@ -1948,6 +1951,7 @@
 				C20000000000000000000004 /* RunningApplicationStore.swift in Sources */,
 				A0000000000000000000101F /* FinderP0Tests.swift in Sources */,
 				B7ABF8240B55C046448D2651 /* XQuartzWindowInventoryTests.swift in Sources */,
+				B72584CA35EC2E32AA864F3B /* NamedDrawerStoreTests.swift in Sources */,
 				B717BB843A04FE580BD04A10 /* DesktopIconPlacementTests.swift in Sources */,
 				B71ADA02379B5CCD33FE20EA /* CurrentDesktopFilterTests.swift in Sources */,
 				A0000000000000000000B012 /* AccessibilityPermissionDecision.swift in Sources */,

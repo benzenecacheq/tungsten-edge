@@ -3,6 +3,121 @@ import OSLog
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - Drawer Capsules
+
+/// One capsule per named drawer, in a row after a bottom bar or a column below a side bar.
+/// Each capsule keeps the full shadow padding on its outer sides and half the capsule gap on the
+/// sides it shares with a neighbour, so the stack lines up with `capsuleSlotFrame`.
+struct DrawerCapsuleStack: View {
+    @EnvironmentObject var drawerStore: DrawerStore
+    @EnvironmentObject var settingsStore: AppSettingsStore
+
+    var onRequestMenu: (NSEvent, NSView, String) -> Void = { _, _, _ in }
+    let usesLiquidGlass: Bool
+    /// The capsule's drawer was toggled (the expand cell, or a cell with no app).
+    let action: (String) -> Void
+    let onPrimaryAction: () -> Void
+    /// The pointer entered (true) or left (false) a capsule.
+    var onHoverChanged: (String, Bool) -> Void = { _, _ in }
+
+    /// The capsule being dragged to a new place, and how far along the stack it has moved.
+    @State private var draggedID: String?
+    @State private var dragDistance: CGFloat = 0
+    /// When the last reorder drag ended: the mouse-up that ends it must not also count as a click.
+    @State private var reorderClock = ReorderClock()
+
+    final class ReorderClock { var endedAt = Date.distantPast }
+
+    var body: some View {
+        // Not `AnyLayout`: the app still runs on macOS 12.
+        if settingsStore.taskbarEdge.isVertical {
+            VStack(spacing: 0) { capsules(vertical: true) }
+        } else {
+            HStack(spacing: 0) { capsules(vertical: false) }
+        }
+    }
+
+    /// Distance from one capsule to the next along the stack.
+    private var pitch: CGFloat {
+        let metrics = settingsStore.panelLayoutMetrics
+        return metrics.capsuleWidth + metrics.capsuleGap
+    }
+
+    /// Where the dragged capsule would land now.
+    private func dropIndex(from: Int, count: Int) -> Int {
+        min(max(from + Int((dragDistance / pitch).rounded()), 0), count - 1)
+    }
+
+    /// The dragged capsule follows the pointer; the ones it passes step aside.
+    private func offset(index: Int, drawers: [NamedDrawer]) -> CGFloat {
+        guard let draggedID, let from = drawers.firstIndex(where: { $0.id == draggedID }) else { return 0 }
+        if index == from { return dragDistance }
+        let to = dropIndex(from: from, count: drawers.count)
+        if from < to, (from + 1...to).contains(index) { return -pitch }
+        if to < from, (to..<from).contains(index) { return pitch }
+        return 0
+    }
+
+    /// Drag a capsule along the stack to reorder the drawers. Simultaneous, so a click on an
+    /// app or the open button still works; a click never moves far enough to start a drag.
+    private func reorderGesture(_ drawerID: String, vertical: Bool) -> some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .global)
+            .onChanged { value in
+                guard drawerStore.drawers.count > 1 else { return }
+                if draggedID == nil { onHoverChanged(drawerID, false) }
+                draggedID = drawerID
+                // Global coordinates grow down the screen, as the stack's order does.
+                dragDistance = vertical ? value.translation.height : value.translation.width
+            }
+            .onEnded { _ in
+                let drawers = drawerStore.drawers
+                guard draggedID == drawerID, let from = drawers.firstIndex(where: { $0.id == drawerID }) else { return }
+                let to = dropIndex(from: from, count: drawers.count)
+                reorderClock.endedAt = Date()
+                withAnimation(.easeOut(duration: 0.2)) {
+                    drawerStore.moveDrawer(drawerID, to: to)
+                    draggedID = nil
+                    dragDistance = 0
+                }
+            }
+    }
+
+    private func capsules(vertical: Bool) -> some View {
+        let drawers = drawerStore.drawers
+        return ForEach(Array(drawers.enumerated()), id: \.element.id) { index, drawer in
+            DrawerCapsuleButton(
+                drawerID: drawer.id,
+                isRow: vertical,
+                edgePadding: padding(index: index, count: drawers.count, vertical: vertical),
+                onRequestTaskbarMenu: { event, view in onRequestMenu(event, view, drawer.id) },
+                usesLiquidGlass: usesLiquidGlass,
+                action: { action(drawer.id) },
+                onPrimaryAction: onPrimaryAction,
+                onHoverChanged: { onHoverChanged(drawer.id, $0) },
+                isTapSuppressed: { [reorderClock] in
+                    draggedID != nil || Date().timeIntervalSince(reorderClock.endedAt) < 0.3
+                }
+            )
+            .offset(x: vertical ? 0 : offset(index: index, drawers: drawers),
+                    y: vertical ? offset(index: index, drawers: drawers) : 0)
+            .zIndex(draggedID == drawer.id ? 1 : 0)
+            .animation(draggedID == drawer.id ? nil : .easeOut(duration: 0.15),
+                       value: offset(index: index, drawers: drawers))
+            .simultaneousGesture(reorderGesture(drawer.id, vertical: vertical))
+        }
+    }
+
+    private func padding(index: Int, count: Int, vertical: Bool) -> EdgeInsets {
+        let outer = PanelCoordinator.shadowPadding
+        let inner = settingsStore.panelLayoutMetrics.capsuleGap / 2
+        let leading = index == 0 ? outer : inner
+        let trailing = index == count - 1 ? outer : inner
+        return vertical
+            ? EdgeInsets(top: leading, leading: outer, bottom: trailing, trailing: outer)
+            : EdgeInsets(top: outer, leading: leading, bottom: outer, trailing: trailing)
+    }
+}
+
 // MARK: - Drawer Capsule Button
 
 struct DrawerCapsuleButton: View {
@@ -18,6 +133,13 @@ struct DrawerCapsuleButton: View {
     @EnvironmentObject var dragController: DragController
     @Environment(\.colorScheme) private var colorScheme
     private var theme: DockThemeTokens { .resolved(for: colorScheme) }
+    /// The named drawer this capsule shows and opens.
+    let drawerID: String
+    /// Below a side bar the capsule is a row as wide as the bar: as many full-size icons as fit,
+    /// each clickable, then a button that opens the whole drawer. Otherwise the 2 × 2 preview.
+    let isRow: Bool
+    /// Transparent room around the visible capsule (`DrawerCapsuleStack.padding`).
+    let edgePadding: EdgeInsets
     /// 右键胶囊 → 弹钨极菜单。胶囊是设置的**主要后路入口**：它恒在、位置固定、尺寸等于面板高度，
     /// 而且是钨极自己的部件（不属于任何 app），不像任务条底板那样只剩几条缝可点。
     var onRequestTaskbarMenu: (NSEvent, NSView) -> Void = { _, _ in }
@@ -30,6 +152,10 @@ struct DrawerCapsuleButton: View {
     /// An app cell dispatched an "open" (launch / unhide): an open drawer closes, exactly as
     /// after a tap inside it. No default — an omission would leave the drawer open.
     let onPrimaryAction: () -> Void
+    /// The pointer entered (true) or left (false) the capsule: its drawer's name shows meanwhile.
+    var onHoverChanged: (Bool) -> Void = { _ in }
+    /// True while (or just after) the capsule is dragged to reorder: a click then does nothing.
+    var isTapSuppressed: () -> Bool = { false }
 
     /// Cells are numbered row-major, 0...3; the last one is the expand cell.
     @State private var hoveredCell: Int?
@@ -46,7 +172,7 @@ struct DrawerCapsuleButton: View {
     private var memberIDs: [String] {
         let placements = AppMembershipProjection.drawerMembers(drawerIDs: drawerStore.bundleIDs)
         return AppMembershipProjection.visibleDrawerIDs(
-            drawerIDs: drawerOrderStore.reconciled(members: placements),
+            drawerIDs: drawerStore.members(drawerOrderStore.reconciled(members: placements), inDrawer: drawerID),
             keptIDs: keptAppStore.bundleIDs,
             runningIDs: runningApplicationStore.runningBundleIDs
         )
@@ -85,7 +211,9 @@ struct DrawerCapsuleButton: View {
 
             // Hover and press feedback move only the cell under the pointer; the outer frame
             // (backdrop + rim) stays still.
-            if ids.isEmpty {
+            if isRow {
+                rowPreview(ids: ids)
+            } else if ids.isEmpty {
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: 20 * dockScale, weight: .medium))
                     .foregroundStyle(theme.capsuleGlyph.color)
@@ -99,19 +227,19 @@ struct DrawerCapsuleButton: View {
                       lineWidth: theme.panelRimLineWidth,
                       usesLiquidGlass: usesLiquidGlass)
         // 拖卡悬到胶囊上：**微微发光 + 极轻微放大**（去掉原来生硬的白圈描边,owner 2026-06-21）。
-        .scaleEffect(dragController.isOverStashZone ? 1.04 : 1.0)
-        .dockGlow(theme.capsuleStashGlow, radius: 5, active: dragController.isOverStashZone)
-        .animation(.easeInOut(duration: DrawerAnimation.duration), value: dragController.isOverStashZone)
+        .scaleEffect(isDropTarget ? 1.04 : 1.0)
+        .dockGlow(theme.capsuleStashGlow, radius: 5, active: isDropTarget)
+        .animation(.easeInOut(duration: DrawerAnimation.duration), value: isDropTarget)
         .dockShadow(theme.stripShadow,
                     visible: DockLiquidGlassConfiguration.stripShadowVisible(
                         usesLiquidGlass: usesLiquidGlass,
                         usesSystemVariant: DockGlassPresentation.usesSystemVariant))
-        .padding(PanelCoordinator.shadowPadding)
+        .padding(edgePadding)
         // The hit cells split the whole padded frame into quadrants, so each target is as large
         // as the capsule allows and reaches the screen edge.
-        .overlay(hitGrid(apps: apps))
+        .overlay(isRow ? AnyView(rowHits(ids: ids)) : AnyView(hitGrid(apps: apps)))
         // Takes scroll events only (see `DrawerCapsuleScrollView.hitTest`); clicks fall through.
-        .overlay(DrawerCapsuleScrollReceiver(enabled: hoverEnabled && pageCount > 1) { event in
+        .overlay(DrawerCapsuleScrollReceiver(enabled: !isRow && hoverEnabled && pageCount > 1) { event in
             switch event {
             case .step(let direction): pager.step(direction, pageCount: pageCount)
             case .drag(let points): pager.drag(points: points, side: capsuleSide)
@@ -122,11 +250,69 @@ struct DrawerCapsuleButton: View {
         // goes back to the first page.
         .onChange(of: hoveredCell == nil) { away in
             pager.pointerAway = away
+            onHoverChanged(!away)
         }
         // MenuHostNSView takes only right / Control-clicks and lets left clicks through to the
         // cells above, so a right click anywhere on the capsule is the Tungsten menu — the
         // settings fallback entry keeps the whole capsule.
         .overlay(NativeMenuHost(popUpHandler: onRequestTaskbarMenu))
+    }
+
+    /// A drag would file into this capsule's drawer: the pointer is over a drop zone and this
+    /// drawer is the one a drop goes to.
+    private var isDropTarget: Bool {
+        dragController.isOverStashZone && drawerStore.activeDrawerID == drawerID
+    }
+
+    // MARK: Row
+
+    /// The row's cell pitch: a bare icon card's slot, as on the bar.
+    private var rowSlot: CGFloat { ChipPillMetrics.bareIconSlot * dockScale }
+    /// Space before the first icon: centres a slot across the capsule's height.
+    private var rowInset: CGFloat { (capsuleSide - rowSlot) / 2 }
+    private var rowWidth: CGFloat { settingsStore.panelLayoutMetrics.columnWidth }
+
+    /// The apps the row shows: as many as fit, leaving the last slot to the open-drawer button.
+    private func rowApps(_ ids: [String]) -> [String] {
+        let slots = Int((rowWidth - 2 * rowInset) / rowSlot)
+        return Array(ids.prefix(max(slots - 1, 0)))
+    }
+
+    private func rowPreview(ids: [String]) -> some View {
+        let apps = rowApps(ids)
+        let expandCell = apps.count
+        return HStack(spacing: 0) {
+            ForEach(Array(apps.enumerated()), id: \.element) { index, id in
+                DrawerCapsuleAppIcon(bundleID: id,
+                                     size: ChipPillMetrics.bareIconVisibleSlot * dockScale,
+                                     bounceHeight: DrawerCapsulePreviewMetrics.bounceHeight * dockScale,
+                                     isLaunching: runtime.launchingBundleIDs.contains(id))
+                    .cellFeedback(hovered: hoverEnabled && hoveredCell == index, pressed: pressedCell == index)
+                    .frame(width: rowSlot, height: rowSlot)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 18 * dockScale, weight: .medium))
+                .foregroundStyle(theme.capsuleGlyph.color)
+                .cellFeedback(hovered: hoverEnabled && hoveredCell == expandCell,
+                              pressed: pressedCell == expandCell)
+                .frame(width: rowSlot, height: rowSlot)
+        }
+        .padding(.horizontal, rowInset)
+        .frame(width: rowWidth, height: capsuleSide)
+    }
+
+    /// One cell per shown app, reaching across the whole padded height; the rest of the row
+    /// (the gap and the button at its end) opens the drawer.
+    private func rowHits(ids: [String]) -> some View {
+        let apps = rowApps(ids)
+        return HStack(spacing: 0) {
+            ForEach(Array(apps.enumerated()), id: \.element) { index, id in
+                hitCell(index, bundleID: id)
+                    .frame(width: rowSlot + (index == 0 ? edgePadding.leading + rowInset : 0))
+            }
+            hitCell(apps.count, bundleID: nil)
+        }
     }
 
     // MARK: Preview
@@ -192,7 +378,7 @@ struct DrawerCapsuleButton: View {
                 if hovering { hoveredCell = index } else if hoveredCell == index { hoveredCell = nil }
             }
             .onTapGesture {
-                guard !isMidTurn else { return }
+                guard !isMidTurn, !isTapSuppressed() else { return }
                 if let bundleID { activate(bundleID) } else { action() }
             }
             // A tap during a launch session or a turn is a no-op, so it gets no press feedback either.

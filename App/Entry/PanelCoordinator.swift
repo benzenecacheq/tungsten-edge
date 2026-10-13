@@ -27,7 +27,11 @@ final class PanelCoordinator: NSObject {
     /// Panel geometry follows the user's bar height, so these are **instance** properties that
     /// read the store; only `shadowPadding` stays static (fixed 20, referenced by the drawer
     /// and both popups).
-    var layoutMetrics: PanelLayoutMetrics { settingsStore.panelLayoutMetrics }
+    var layoutMetrics: PanelLayoutMetrics {
+        var metrics = settingsStore.panelLayoutMetrics
+        metrics.capsuleCount = drawerStore.drawers.count
+        return metrics
+    }
     /// The screen edge the bar hugs (settings → `TaskbarEdge`).
     var taskbarEdge: TaskbarEdge { settingsStore.taskbarEdge }
     var panelHeight: CGFloat { layoutMetrics.panelHeight }
@@ -93,7 +97,8 @@ final class PanelCoordinator: NSObject {
     /// 右键任务条 / 胶囊时弹出钨极菜单。菜单归 `StatusMenuController` 持有，这里只转发事件——
     /// 正常运行时应用是 `.accessory`（没有菜单栏，也就没有 ⌘,），状态栏图标一旦被挤掉或被刘海挡住，
     /// 这就是打开设置的唯一后路。
-    var onRequestTaskbarMenu: ((NSEvent, NSView) -> Void)?
+    /// The Tungsten menu; a drawer capsule puts its own items (`leadingItems`) on top.
+    var onRequestTaskbarMenu: ((_ event: NSEvent, _ view: NSView, _ leadingItems: [NSMenuItem]) -> Void)?
     var dockPanel: NSPanel?
     var dockGlassBackgroundPanel: NonConstrainingPanel?
     var dockGlassBackgroundView: DockTaskbarLiquidGlassBackgroundView?
@@ -427,6 +432,17 @@ final class PanelCoordinator: NSObject {
         if drawerWantsOpen { closeDrawer() } else { openDrawer() }
     }
 
+    /// A capsule's toggle: closes its own open drawer, otherwise shows its drawer (switching an
+    /// open drawer over to it at once).
+    func toggleDrawer(_ drawerID: String) {
+        if drawerWantsOpen {
+            if drawerStore.activeDrawerID == drawerID { closeDrawer(); return }
+            closeDrawerImmediately()
+        }
+        drawerStore.setActiveDrawer(drawerID)
+        openDrawer()
+    }
+
     /// 权限丢失时把整套面板拆干净并交出所有权（调用方随后置空引用即可）。幂等。
     ///
     /// 这里刻意**不**走「手工列一份摘监视器清单」的路子——漏项风险太高：
@@ -543,7 +559,7 @@ final class PanelCoordinator: NSObject {
     /// 胶囊的可视帧（屏幕坐标，目标帧优先）。给 `DragController` 的「吸进胶囊」飞行当终点。
     var capsuleVisibleFrame: CGRect? {
         let frame = lastCapsuleTargetFrame != .zero ? lastCapsuleTargetFrame : capsulePanel?.frame
-        return frame?.insetBy(dx: Self.shadowPadding, dy: Self.shadowPadding)
+        return frame.map { activeCapsuleFrame(inGroup: $0).insetBy(dx: Self.shadowPadding, dy: Self.shadowPadding) }
     }
 
     // MARK: - Window title tooltip

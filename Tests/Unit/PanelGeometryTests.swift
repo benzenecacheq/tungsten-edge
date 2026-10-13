@@ -604,9 +604,47 @@ final class PanelGeometryTests: XCTestCase {
 
         XCTAssertEqual(cap.maxY, bar.minY - metrics.capsuleGap, "capsule sits capsuleGap under the bar")
         XCTAssertEqual(cap.minX, bar.minX, "flush with the column's inner edge")
-        XCTAssertEqual(cap.width, metrics.capsuleWidth)
+        XCTAssertEqual(cap.width, bar.width, "a row as wide as the bar")
         let rangeMid = (metrics.outerMargin + (949 - metrics.outerMargin)) / 2
         XCTAssertEqual((cap.minY + bar.maxY) / 2, rangeMid, "group centred between the bottom and the menu bar")
+    }
+
+    func testNamedDrawerCapsulesStackBelowAColumn() {
+        var m = metrics
+        m.capsuleCount = 3
+        let dock = PanelGeometry.dockTargetFrame(contentLength: 400, on: rightEdgeScreen, metrics: m, edge: .right)
+        let group = PanelGeometry.capsuleTargetFrame(forDock: dock, on: rightEdgeScreen, metrics: m, edge: .right)
+        let bar = dock.insetBy(dx: m.shadowPadding, dy: m.shadowPadding)
+        let slots = (0..<3).map {
+            PanelGeometry.capsuleSlotFrame(index: $0, inGroup: group, metrics: m, edge: .right)
+                .insetBy(dx: m.shadowPadding, dy: m.shadowPadding)
+        }
+        XCTAssertEqual(slots[0].maxY, bar.minY - m.capsuleGap, "the first capsule keeps its place under the bar")
+        for (upper, lower) in zip(slots, slots.dropFirst()) {
+            XCTAssertEqual(lower.maxY, upper.minY - m.capsuleGap)
+            XCTAssertEqual(lower.minX, bar.minX)
+        }
+        XCTAssertEqual(slots[2].minY, group.minY + m.shadowPadding, "the group ends at the last capsule")
+        XCTAssertEqual(slots[0].size, CGSize(width: bar.width, height: m.capsuleWidth))
+        let rangeMid = (m.outerMargin + (949 - m.outerMargin)) / 2
+        XCTAssertEqual((slots[2].minY + bar.maxY) / 2, rangeMid, "bar and all capsules centred as one group")
+    }
+
+    func testNamedDrawerCapsulesRunRightOfABottomBar() {
+        var m = metrics
+        m.capsuleCount = 2
+        let screen = rightEdgeScreen
+        let dock = PanelGeometry.dockTargetFrame(contentLength: 400, on: screen, metrics: m, edge: .bottom)
+        let group = PanelGeometry.capsuleTargetFrame(forDock: dock, on: screen, metrics: m, edge: .bottom)
+        let bar = dock.insetBy(dx: m.shadowPadding, dy: m.shadowPadding)
+        let first = PanelGeometry.capsuleSlotFrame(index: 0, inGroup: group, metrics: m, edge: .bottom)
+            .insetBy(dx: m.shadowPadding, dy: m.shadowPadding)
+        let second = PanelGeometry.capsuleSlotFrame(index: 1, inGroup: group, metrics: m, edge: .bottom)
+            .insetBy(dx: m.shadowPadding, dy: m.shadowPadding)
+        XCTAssertEqual(first.minX, bar.maxX + m.capsuleGap)
+        XCTAssertEqual(second.minX, first.maxX + m.capsuleGap)
+        XCTAssertEqual(second.minY, first.minY)
+        XCTAssertEqual((bar.minX + second.maxX) / 2, 1512 / 2, "bar and capsules centred as one group")
     }
 
     func testRightEdgeBarIsCappedBelowTheMenuBar() {

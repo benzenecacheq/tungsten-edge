@@ -74,7 +74,8 @@ extension PanelCoordinator {
     /// 顶部上限仍避让菜单栏 / 刘海；底部锚点不避让原生 Dock，避免 Command+Option+D 或侧边 Dock 推动抽屉。
     private func drawerAnchor(on screen: NSScreen) -> (capsuleRef: NSRect, limits: StackGridLayout.Limits) {
         let screenGeometry = Self.screenGeometry(screen)
-        let capsuleRef = lastCapsuleTargetFrame == .zero ? (capsulePanel?.frame ?? .zero) : lastCapsuleTargetFrame
+        let group = lastCapsuleTargetFrame == .zero ? (capsulePanel?.frame ?? .zero) : lastCapsuleTargetFrame
+        let capsuleRef = group == .zero ? group : activeCapsuleFrame(inGroup: group)
         return (capsuleRef, PanelGeometry.drawerGridLimits(forCapsule: capsuleRef, on: screenGeometry,
                                                            metrics: layoutMetrics, edge: taskbarEdge))
     }
@@ -86,6 +87,43 @@ extension PanelCoordinator {
     /// transparent border.
     static func drawerPlateFrame(_ panelFrame: NSRect) -> CGRect {
         PanelGeometry.folderPopupPlateFrame(panelFrame: panelFrame)
+    }
+
+    // MARK: - Capsules
+
+    /// Each drawer's capsule frame inside the capsule panel's frame `group`, padded like a panel.
+    func capsuleSlots(inGroup group: NSRect) -> [(drawerID: String, frame: NSRect)] {
+        drawerStore.drawers.enumerated().map { index, drawer in
+            (drawer.id, PanelGeometry.capsuleSlotFrame(index: index, inGroup: group,
+                                                       metrics: layoutMetrics, edge: taskbarEdge))
+        }
+    }
+
+    /// The active drawer's capsule: what the open drawer, its arrow and a stash flight aim at.
+    func activeCapsuleFrame(inGroup group: NSRect) -> NSRect {
+        let slots = capsuleSlots(inGroup: group)
+        return (slots.first { $0.drawerID == drawerStore.activeDrawerID } ?? slots.first)?.frame ?? group
+    }
+
+    /// The drawer whose capsule's spring zone holds `point` (target frames), if any.
+    func capsuleDrawerID(at point: CGPoint) -> String? {
+        guard lastCapsuleTargetFrame != .zero else { return nil }
+        return capsuleSlots(inGroup: lastCapsuleTargetFrame).first { springZone($0.frame).contains(point) }?.drawerID
+    }
+
+    /// The pointer entered or left a capsule: show its drawer's name in the title bubble.
+    func drawerCapsuleHoverChanged(_ drawerID: String, hovering: Bool) {
+        let chipID = "drawer-capsule-\(drawerID)"
+        guard hovering else {
+            handleWindowTitleTooltipEvent(.exit(chipID: chipID))
+            return
+        }
+        guard dragController.draggingPayload == nil,
+              let group = capsulePanel?.frame,
+              let slot = capsuleSlots(inGroup: group).first(where: { $0.drawerID == drawerID }) else { return }
+        let visible = slot.frame.insetBy(dx: Self.shadowPadding, dy: Self.shadowPadding)
+        handleWindowTitleTooltipEvent(.update(WindowTitleTooltipRequest(
+            chipID: chipID, title: drawerStore.displayName(of: drawerID), anchorVisibleRect: visible)))
     }
 
     // MARK: - Arrow
@@ -131,9 +169,10 @@ extension PanelCoordinator {
     }
 
     private func writeDrawerArrow(live: Bool) {
-        let capsule = live ? capsulePanel?.frame : lastCapsuleTargetFrame
+        let group = live ? capsulePanel?.frame : lastCapsuleTargetFrame
         let drawer = live ? drawerPanel?.frame : lastDrawerTargetFrame
-        guard let capsule, let drawer, capsule != .zero, drawer != .zero else { return }
+        guard let group, let drawer, group != .zero, drawer != .zero else { return }
+        let capsule = activeCapsuleFrame(inGroup: group)
         let offset = capsule.midX - drawer.midX   // the capsule's visible rect is inset symmetrically
         if drawerArrow.offsetFromCenter != offset { drawerArrow.offsetFromCenter = offset }
         let hidden = taskbarEdge.isVertical
@@ -290,8 +329,11 @@ extension PanelCoordinator {
         switch source {
         case .strip, .messaging:
             var zones: [CGRect] = []
-            if let c = target(lastCapsuleTargetFrame, capsulePanel?.frame) {
-                zones.append(c.insetBy(dx: Self.shadowPadding - 8, dy: Self.shadowPadding - 8))
+            if let group = target(lastCapsuleTargetFrame, capsulePanel?.frame) {
+                // One zone per capsule: a drop goes to the drawer of the capsule under it.
+                for slot in capsuleSlots(inGroup: group) {
+                    zones.append(slot.frame.insetBy(dx: Self.shadowPadding - 8, dy: Self.shadowPadding - 8))
+                }
             }
             if let drawer = drawerPanel, drawer.isVisible, let d = target(lastDrawerTargetFrame, drawer.frame) {
                 // 抽屉只向上长：投放区**上沿拉到屏幕顶**,只认固定的底边+宽度,不随面板增高/缩短而变。
@@ -380,7 +422,18 @@ extension PanelCoordinator {
         guard dragOriginatedFromStrip else { cancelSpringTimers(); return }
 
         let inDrawer  = drawerWantsOpen && lastDrawerTargetFrame != .zero && drawerSpringZone().contains(location)
-        let inCapsule = lastCapsuleTargetFrame != .zero && springZone(lastCapsuleTargetFrame).contains(location)
+        let hoveredCapsule = inDrawer ? nil : capsuleDrawerID(at: location)
+        let inCapsule = hoveredCapsule != nil
+        // Over another capsule: drops now go to its drawer, and an open drawer switches to it.
+        if let hoveredCapsule, hoveredCapsule != drawerStore.activeDrawerID {
+            drawerStore.setActiveDrawer(hoveredCapsule)
+            if drawerWantsOpen {
+                closeDrawerImmediately()
+                openDrawer()
+                drawerSpringOpened = true
+                dragController.bringCarrierToFront()
+            }
+        }
 
         if inDrawer || inCapsule {
             // 在抽屉或胶囊上 → 取消收回；关着且在胶囊上 → 起开抽屉定时器。
@@ -425,7 +478,7 @@ extension PanelCoordinator {
         guard dragOriginatedFromStrip, drawerWantsOpen else { return }
         let loc = dragController.globalLocation
         let inDrawer  = lastDrawerTargetFrame != .zero && drawerSpringZone().contains(loc)
-        let inCapsule = lastCapsuleTargetFrame != .zero && springZone(lastCapsuleTargetFrame).contains(loc)
+        let inCapsule = capsuleDrawerID(at: loc) != nil
         guard !inDrawer, !inCapsule else { return }   // 又回到抽屉/胶囊 → 不关
         closeDrawer()
     }
@@ -435,7 +488,7 @@ extension PanelCoordinator {
         // 到点仍在拖、仍悬胶囊、抽屉仍关 → 弹开。用 dragOriginatedFromStrip + 重测胶囊命中（不用
         // isOverDropZone：转正成 .drawer 后它指的是任务条区,悬胶囊时为 false,会误拦重开。owner 2026-06-22）。
         let loc = dragController.globalLocation
-        let inCapsule = lastCapsuleTargetFrame != .zero && springZone(lastCapsuleTargetFrame).contains(loc)
+        let inCapsule = capsuleDrawerID(at: loc) != nil
         guard dragController.draggingPayload != nil,
               dragOriginatedFromStrip,
               inCapsule,
@@ -443,5 +496,66 @@ extension PanelCoordinator {
         openDrawer()
         drawerSpringOpened = true   // openDrawer 把它置 false 了,这里标记是弹簧开的
         dragController.bringCarrierToFront()
+    }
+}
+
+// MARK: - Named drawers
+
+extension PanelCoordinator {
+    /// A capsule's right-click: its drawer's commands above the Tungsten menu.
+    func showDrawerCapsuleMenu(event: NSEvent, view: NSView, drawerID: String) {
+        let name = drawerStore.displayName(of: drawerID)
+        var items: [NSMenuItem] = [
+            ClosureMenuItem(String(localized: "New Drawer…")) { [weak self] in
+                self?.promptForNewDrawer()
+            },
+            ClosureMenuItem(String(format: String(localized: "Rename “%@”…"), name)) { [weak self] in
+                self?.promptToRenameDrawer(drawerID)
+            },
+        ]
+        if drawerID != DrawerStore.defaultDrawerID {
+            items.append(ClosureMenuItem(String(format: String(localized: "Delete “%@”"), name)) { [weak self] in
+                self?.deleteDrawer(drawerID)
+            })
+        }
+        onRequestTaskbarMenu?(event, view, items)
+    }
+
+    private func promptForNewDrawer() {
+        guard let name = Self.askForDrawerName(title: String(localized: "New Drawer"),
+                                               confirm: String(localized: "Create"), initial: "") else { return }
+        drawerStore.createDrawer(named: name)
+    }
+
+    private func promptToRenameDrawer(_ drawerID: String) {
+        let current = drawerStore.drawers.first { $0.id == drawerID }?.name ?? ""
+        guard let name = Self.askForDrawerName(title: String(localized: "Rename Drawer"),
+                                               confirm: String(localized: "Rename"),
+                                               initial: current.isEmpty ? drawerStore.displayName(of: drawerID) : current)
+        else { return }
+        drawerStore.renameDrawer(drawerID, to: name)
+    }
+
+    /// Its apps go to the first drawer; an open drawer showing it closes first.
+    private func deleteDrawer(_ drawerID: String) {
+        if drawerWantsOpen && drawerStore.activeDrawerID == drawerID { closeDrawerImmediately() }
+        drawerStore.deleteDrawer(drawerID)
+    }
+
+    /// A small name prompt; nil when cancelled or left empty.
+    private static func askForDrawerName(title: String, confirm: String, initial: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.addButton(withTitle: confirm)
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        let field = NSTextField(string: initial)
+        field.placeholderString = String(localized: "Name")
+        field.frame = NSRect(x: 0, y: 0, width: 240, height: 24)
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : name
     }
 }

@@ -70,7 +70,7 @@ struct DrawerView: View {
     /// 因此隐藏 placement 再出现时仍回到原来的相对位置。
     private var visibleMembers: [String] {
         AppMembershipProjection.visibleDrawerIDs(
-            drawerIDs: displayOrder,
+            drawerIDs: drawerStore.members(displayOrder, inDrawer: drawerStore.activeDrawerID),
             keptIDs: keptAppStore.bundleIDs,
             runningIDs: runningApplicationStore.runningBundleIDs
         )
@@ -124,7 +124,7 @@ struct DrawerView: View {
         // One grid in the drawer's own order: the folder popup's chrome with apps in its cells.
         let ids = visibleMembers
         let shape = gridShape(cellIDs: ids)
-        return StackPopupChrome(title: String(localized: "Drawer"),
+        return StackPopupChrome(title: drawerStore.displayName(of: drawerStore.activeDrawerID),
                                 note: shape.showsHint ? String(localized: "Drag apps here from the taskbar") : nil,
                                 layout: shape.layout,
                                 plate: .drawer,

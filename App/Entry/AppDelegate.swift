@@ -594,8 +594,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 右键任务条 / 胶囊弹钨极菜单。走到这里说明已授权且不是临时副本，
         // 状态栏菜单必然已经建好（`applicationDidFinishLaunching` 的非临时分支），
         // 不存在"凭空造出一个状态栏图标"的问题。
-        coordinator.onRequestTaskbarMenu = { [weak self] event, view in
-            self?.statusMenuController.popUpFromTaskbar(with: event, in: view)
+        coordinator.onRequestTaskbarMenu = { [weak self] event, view, leadingItems in
+            self?.statusMenuController.popUpFromTaskbar(with: event, in: view, leadingItems: leadingItems)
         }
         coordinator.start()
         let windowLiftAvoidanceController = WindowLiftAvoidanceController(host: coordinator)

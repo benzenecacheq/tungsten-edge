@@ -31,7 +31,10 @@ extension PanelCoordinator {
     }
 
     func subscribeDrawerStoreWidth() {
-        drawerStoreWidthSubscription = drawerStore.$bundleIDs
+        // A new, deleted or moved drawer changes the capsules: the bar's room, and the capsule an
+        // open drawer hangs from.
+        drawerStoreWidthSubscription = drawerStore.$bundleIDs.map { _ in () }
+            .merge(with: drawerStore.$drawers.map { $0.map(\.id) }.removeDuplicates().map { _ in () })
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 DispatchQueue.main.async { [weak self] in
@@ -438,7 +441,8 @@ extension PanelCoordinator {
             // Smaller than any plate = not laid out yet, never a size: keep the last good one.
             let fitting = hosting.fittingSize
             if Self.isPlausibleDrawerSize(fitting) { lastDrawerSize = fitting }
-            let drawerT = drawerTargetFrame(forCapsule: capsuleT, size: lastDrawerSize, on: screen)
+            let drawerT = drawerTargetFrame(forCapsule: activeCapsuleFrame(inGroup: capsuleT),
+                                            size: lastDrawerSize, on: screen)
             lastDrawerTargetFrame = drawerT
             pairs.append((drawer, drawerT))
         }

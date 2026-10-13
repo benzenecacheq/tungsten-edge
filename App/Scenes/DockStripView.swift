@@ -37,7 +37,11 @@ struct DockStripView: View {
 
     /// 当前尺寸档位派生的面板几何与缩放系数。**条内不写裸尺寸数字**——凡是随任务条一起
     /// 放大缩小的值都乘 `dockScale`；发丝线（分隔线宽、描边）保持 1pt 不缩。
-    private var metrics: PanelLayoutMetrics { settingsStore.panelLayoutMetrics }
+    private var metrics: PanelLayoutMetrics {
+        var metrics = settingsStore.panelLayoutMetrics
+        metrics.capsuleCount = drawerStore.drawers.count
+        return metrics
+    }
     var dockScale: CGFloat { settingsStore.dockPanelHeight.scale }
     /// 任务条圆角。**玻璃态与毛玻璃态同一个值** —— 几何只有 `DockPanelHeight.metrics` /
     /// `DockShape` 一个来源，换底板材质不改尺寸（否则高度缩放失效，`scale` 的定义
@@ -907,7 +911,7 @@ struct DockStripView: View {
         }
         let box = StripPointerBox.classify(pointer: taskbarEdge.screenCanonical(dc.globalLocation),
                                            stripRect: taskbarEdge.screenCanonical(stripRootScreenRect),
-                                           rightReach: metrics.capsuleGap + metrics.capsuleWidth,
+                                           rightReach: metrics.capsuleGap + metrics.capsuleRun,
                                            profile: .stripPresence)
         if box.enter {
             dc.noteStripEntered(surfaceID: stripSurfaceID, displayUUID: displayUUID)
@@ -930,7 +934,7 @@ struct DockStripView: View {
         // 它的投放区只有任务条面板，并进来不会和收纳打架）。
         let box = StripPointerBox.classify(pointer: taskbarEdge.screenCanonical(g),
                                            stripRect: taskbarEdge.screenCanonical(r),
-                                           rightReach: metrics.capsuleGap + metrics.capsuleWidth,
+                                           rightReach: metrics.capsuleGap + metrics.capsuleRun,
                                            profile: .drawerConversion)
         let enter = box.enter, clearlyOut = box.clearlyOut
         if HoverTrace.isEnabled {

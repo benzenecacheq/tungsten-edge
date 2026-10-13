@@ -412,7 +412,19 @@ final class StatusMenuController: NSObject, NSMenuDelegate {
     /// 和状态栏图标**共用同一个 `NSMenu` 实例**：菜单里的两条滑块和确认按钮是有状态的自绘 NSView，
     /// 克隆一份会立刻出现"两个滑块各记各的草稿"。`menuWillOpen` 的既有逻辑（回灌系统 Dock 真值、
     /// 刷新勾选、丢弃未确认草稿）走的是同一个 delegate，所以两个入口行为完全一致。
-    func popUpFromTaskbar(with event: NSEvent, in view: NSView) {
+    /// `leadingItems` (a drawer capsule's own commands) sit above the Tungsten menu for this
+    /// one presentation, then come out again.
+    func popUpFromTaskbar(with event: NSEvent, in view: NSView, leadingItems: [NSMenuItem] = []) {
+        let added = leadingItems.isEmpty ? [] : leadingItems + [NSMenuItem.separator()]
+        for (index, item) in added.enumerated() { menu.insertItem(item, at: index) }
+        presentFromTaskbar(with: event, in: view)
+        // A turn later: after the picked item's action has run (AppKit sends it as tracking ends).
+        if !added.isEmpty {
+            DispatchQueue.main.async { [menu] in added.forEach { menu.removeItem($0) } }
+        }
+    }
+
+    private func presentFromTaskbar(with event: NSEvent, in view: NSView) {
         // 自己算锚点，让菜单**底边贴任务条上沿**、左边对齐鼠标——像右键系统程序坞那样浮在条的
         // 上方，不遮挡它。交给 `NSMenu.popUpContextMenu` 自动翻转的话，实测菜单底边会落在鼠标
         // 下方 28pt，把整条任务条盖住（owner 2026-08-03 反馈"不跟手"的一半原因）。

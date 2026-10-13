@@ -91,6 +91,14 @@ struct PanelLayoutMetrics: Equatable {
     var columnVerticalPosition: CGFloat = 0.5
     /// Which end of the column stays at `columnVerticalPosition` as its length changes.
     var columnGrowth: ColumnGrowth = .both
+    /// How many drawer capsules follow the bar (one per named drawer), `capsuleGap` apart.
+    var capsuleCount: Int = 1
+
+    /// The capsules' extent along the bar: every capsule plus the gaps between them.
+    var capsuleRun: CGFloat {
+        let count = CGFloat(max(capsuleCount, 1))
+        return count * capsuleWidth + (count - 1) * capsuleGap
+    }
 
     /// Fixed; never scales with the bar height (see `DockPanelHeight.metrics`).
     static let shadowPadding: CGFloat = 20
@@ -389,7 +397,7 @@ enum PanelGeometry {
         on screen: PanelScreenGeometry,
         metrics: PanelLayoutMetrics = .tungstenEdge
     ) -> CGRect {
-        let trailing = metrics.capsuleGap + metrics.capsuleWidth
+        let trailing = metrics.capsuleGap + metrics.capsuleRun
         let maxWidth = screen.frame.width - 2 * metrics.outerMargin - trailing
         let panelWidth = max(min(contentWidth, maxWidth), metrics.minimumDockWidth)
         let x = screen.frame.minX + (screen.frame.width - (panelWidth + trailing)) / 2
@@ -416,7 +424,7 @@ enum PanelGeometry {
         guard edge.isVertical else {
             return dockTargetFrame(contentWidth: contentLength, on: screen, metrics: metrics)
         }
-        let trailing = metrics.capsuleGap + metrics.capsuleWidth
+        let trailing = metrics.capsuleGap + metrics.capsuleRun
         let top = screen.topUsableY - metrics.outerMargin
         let bottom = screen.frame.minY + metrics.outerMargin
         let maxLength = top - bottom - trailing
@@ -440,8 +448,7 @@ enum PanelGeometry {
         )
     }
 
-    /// On a side edge the capsule sits under the bar, flush with its inner edge: that centres it
-    /// on the column the icon cards line up in.
+    /// On a side edge the capsules sit under the bar, each a row exactly as wide as the bar.
     static func capsuleTargetFrame(
         forDock dockFrame: CGRect,
         on screen: PanelScreenGeometry,
@@ -451,15 +458,17 @@ enum PanelGeometry {
         guard edge.isVertical else {
             return capsuleTargetFrame(forDock: dockFrame, on: screen, metrics: metrics)
         }
+        // Below a column each capsule is a row as wide as the bar (`DrawerCapsuleButton.isRow`).
+        let run = metrics.capsuleRun
         let rawX = dockFrame.minX + metrics.shadowPadding
-        let rawY = dockFrame.minY + metrics.shadowPadding - metrics.capsuleGap - metrics.capsuleWidth
-        let clampedX = min(max(rawX, screen.frame.minX), screen.frame.maxX - metrics.capsuleWidth)
-        let clampedY = min(max(rawY, screen.frame.minY), screen.frame.maxY - metrics.capsuleWidth)
+        let rawY = dockFrame.minY + metrics.shadowPadding - metrics.capsuleGap - run
+        let clampedX = min(max(rawX, screen.frame.minX), screen.frame.maxX - metrics.columnWidth)
+        let clampedY = min(max(rawY, screen.frame.minY), screen.frame.maxY - run)
         return CGRect(
             x: clampedX - metrics.shadowPadding,
             y: clampedY - metrics.shadowPadding,
-            width: metrics.capsuleWidth + metrics.shadowPadding * 2,
-            height: metrics.capsuleWidth + metrics.shadowPadding * 2
+            width: metrics.columnWidth + metrics.shadowPadding * 2,
+            height: run + metrics.shadowPadding * 2
         )
     }
 
@@ -468,16 +477,33 @@ enum PanelGeometry {
         on screen: PanelScreenGeometry,
         metrics: PanelLayoutMetrics = .tungstenEdge
     ) -> CGRect {
+        let run = metrics.capsuleRun
         let rawX = dockFrame.maxX - metrics.shadowPadding + metrics.capsuleGap
         let rawY = dockFrame.minY + metrics.shadowPadding + (metrics.panelHeight - metrics.capsuleWidth) / 2
-        let clampedX = min(max(rawX, screen.frame.minX), screen.frame.maxX - metrics.capsuleWidth)
+        let clampedX = min(max(rawX, screen.frame.minX), screen.frame.maxX - run)
         let clampedY = min(max(rawY, screen.frame.minY), screen.frame.maxY - metrics.capsuleWidth)
         return CGRect(
             x: clampedX - metrics.shadowPadding,
             y: clampedY - metrics.shadowPadding,
-            width: metrics.capsuleWidth + metrics.shadowPadding * 2,
+            width: run + metrics.shadowPadding * 2,
             height: metrics.capsuleWidth + metrics.shadowPadding * 2
         )
+    }
+
+    /// One capsule's frame inside the capsule panel's `group` frame, padded by `shadowPadding` as
+    /// if it were a panel of its own (what the drawer, the arrow and the drop zones anchor on).
+    /// Capsule 0 sits next to the bar: the top one below a column, the left one beside a bar.
+    static func capsuleSlotFrame(
+        index: Int,
+        inGroup group: CGRect,
+        metrics: PanelLayoutMetrics = .tungstenEdge,
+        edge: TaskbarEdge
+    ) -> CGRect {
+        let side = metrics.capsuleWidth + metrics.shadowPadding * 2
+        let step = CGFloat(index) * (metrics.capsuleWidth + metrics.capsuleGap)
+        return edge.isVertical
+            ? CGRect(x: group.minX, y: group.maxY - side - step, width: group.width, height: side)
+            : CGRect(x: group.minX + step, y: group.minY, width: side, height: side)
     }
 
     // MARK: Folder / shelf / Trash popup
