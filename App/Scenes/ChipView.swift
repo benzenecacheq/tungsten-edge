@@ -138,6 +138,23 @@ struct ChipView: View {
         return optimistic.status == .active
     }
 
+    /// This chip is the window in front (see `FrontWindowTracker`); never in the drawer or on a
+    /// drag carrier.
+    private var isFrontWindow: Bool {
+        drawerTap == nil && !isDragCarrierSnapshot && runtime.isFrontWindow(item)
+    }
+
+    /// Accent tint and outline over the pill of the window in front.
+    @ViewBuilder private var frontWindowHighlight: some View {
+        if isFrontWindow {
+            let shape = RoundedRectangle(cornerRadius: 10 * scale, style: .continuous)
+            shape
+                .fill(Color.accentColor.opacity(0.16))
+                .overlay(shape.strokeBorder(Color.accentColor.opacity(0.9), lineWidth: 1.5 * scale))
+                .allowsHitTesting(false)
+        }
+    }
+
     private var isMessagingAppWindow: Bool {
         guard let bid = item.bundleIdentifier else { return false }
         return !item.isAppLevelFallback && messagingStore.contains(bid)
@@ -195,7 +212,13 @@ struct ChipView: View {
         // 拖起来的副本不画圆点（原生 Dock 同款：拖动时圆点消失，落位才回来）。
         // 位图在圆点那块因此是**透明**的，交接那一轮条上卡的圆点直接透出来——不会闪也不会晚。
         .overlay(alignment: .bottom) {
-            if showRunningDot && !isDragCarrierSnapshot {
+            if isFrontWindow {
+                // The window in front: a short accent bar in place of the running dot.
+                Capsule()
+                    .fill(Color.accentColor)
+                    .frame(width: 14 * scale, height: 3 * scale)
+                    .padding(.bottom, 2)
+            } else if showRunningDot && !isDragCarrierSnapshot {
                 Circle()
                     .fill(theme.runningDot.color)
                     .frame(width: 4, height: 4)
@@ -302,7 +325,7 @@ struct ChipView: View {
         }
         .padding(.horizontal, ChipPillMetrics.horizontalPadding * scale)
         .frame(height: metrics.pillHeight)
-        .background(pillEmphasisBackground)
+        .background(pillEmphasisBackground.overlay(frontWindowHighlight))
 
         return VStack(spacing: 0) {
             Spacer(minLength: 0)

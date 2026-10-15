@@ -1361,8 +1361,27 @@ struct DockStripView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { columnLabelTapped(entry, projection: projection) }
             }
+            .background(columnFrontHighlight(entry))
         } else {
             card
+        }
+    }
+
+    /// Accent tint and outline behind the whole row of the window in front.
+    @ViewBuilder
+    private func columnFrontHighlight(_ entry: StripEntry) -> some View {
+        let item: StripItem? = switch entry {
+        case let .window(item): item
+        case let .messagingApp(_, main): main
+        default: nil
+        }
+        if let item, runtime.isFrontWindow(item) {
+            let shape = RoundedRectangle(cornerRadius: 7 * dockScale, style: .continuous)
+            shape
+                .fill(Color.accentColor.opacity(0.16))
+                .overlay(shape.strokeBorder(Color.accentColor.opacity(0.9), lineWidth: 1.5))
+                .padding(.horizontal, -4 * dockScale)
+                .allowsHitTesting(false)
         }
     }
 

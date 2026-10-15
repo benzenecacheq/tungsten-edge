@@ -48,6 +48,19 @@ final class AppRuntime: ObservableObject {
     /// launching and its policy is stable. Cleared on a real window, a confirmed windowless app, a
     /// failed launch, or a 20s timeout.
     @Published private(set) var launchingBundleIDs: Set<String> = []
+    /// The window in front (frontmost app + its focused window); its chip is highlighted.
+    @Published private(set) var frontWindow: FrontWindowTracker.Front?
+    private let frontWindowTracker = FrontWindowTracker()
+
+    /// Whether `item` is the window in front. An app-level card stands in for its app, so it
+    /// counts when its app is front; a minimized or hidden window never does.
+    func isFrontWindow(_ item: StripItem) -> Bool {
+        guard let front = frontWindow else { return false }
+        let status = optimisticStatesByWindowID[item.actionWindowID]?.status.rawValue ?? item.status
+        guard status != WindowStatus.minimized.rawValue, status != WindowStatus.hidden.rawValue else { return false }
+        if let windowID = item.cgWindowID { return windowID == front.windowID }
+        return item.isAppLevelFallback && item.pid == front.pid
+    }
 
     private struct LaunchProcessIdentity: Equatable {
         let pid: pid_t
@@ -123,6 +136,11 @@ final class AppRuntime: ObservableObject {
         startedAt = Date()
         hasRequiredPermissions = isAccessibilityTrusted()
         tracker.start()
+        frontWindowTracker.onChange = { [weak self] front in
+            guard let self, self.frontWindow != front else { return }
+            self.frontWindow = front
+        }
+        frontWindowTracker.start()
 
         snapshotSubscription = tracker.$snapshot
             .receive(on: DispatchQueue.main)
@@ -141,6 +159,7 @@ final class AppRuntime: ObservableObject {
 
     func stop() {
         tracker.stop()
+        frontWindowTracker.stop()
         snapshotSubscription?.cancel()
         snapshotSubscription = nil
         feedbackTimer?.invalidate()
