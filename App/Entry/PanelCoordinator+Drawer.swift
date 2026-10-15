@@ -59,6 +59,7 @@ extension PanelCoordinator {
             }
         }
 
+        removeDrawerMonitors()   // reopened without a close in between: never stack a second set
         drawerLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             self?.dismissDrawerIfOutside()
             return event
@@ -66,6 +67,15 @@ extension PanelCoordinator {
         drawerGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
             self?.dismissDrawerIfOutside()
         }
+        drawerMoveMonitors = [
+            NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+                self?.dismissDrawerIfPointerFar()
+                return event
+            } as Any,
+            NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+                self?.dismissDrawerIfPointerFar()
+            } as Any,
+        ]
     }
 
     /// 抽屉的定位输入：胶囊**目标** frame（不读 live：用户可能在任务条宽度动画中触发弹簧开抽屉,Codex 二审 P1）
@@ -274,8 +284,7 @@ extension PanelCoordinator {
         drawerWantsOpen = false
         setAutoHideInhibitor(.drawerOpen, active: false)
         drawerSpringOpened = false
-        if let m = drawerLocalMonitor  { NSEvent.removeMonitor(m); drawerLocalMonitor  = nil }
-        if let m = drawerGlobalMonitor { NSEvent.removeMonitor(m); drawerGlobalMonitor = nil }
+        removeDrawerMonitors()
         stopDrawerArrowFollow()
         guard let panel = drawerPanel else { return }
         NSAnimationContext.runAnimationGroup({ ctx in
@@ -297,22 +306,44 @@ extension PanelCoordinator {
         drawerWantsOpen = false
         setAutoHideInhibitor(.drawerOpen, active: false)
         drawerSpringOpened = false
-        if let monitor = drawerLocalMonitor {
-            NSEvent.removeMonitor(monitor)
-            drawerLocalMonitor = nil
-        }
-        if let monitor = drawerGlobalMonitor {
-            NSEvent.removeMonitor(monitor)
-            drawerGlobalMonitor = nil
-        }
+        removeDrawerMonitors()
         stopDrawerArrowFollow()
         drawerPanel?.alphaValue = 0
         drawerPanel?.orderOut(nil)
         drawerArrow.scrollGeneration &+= 1
     }
 
+    private func removeDrawerMonitors() {
+        if let m = drawerLocalMonitor  { NSEvent.removeMonitor(m); drawerLocalMonitor  = nil }
+        if let m = drawerGlobalMonitor { NSEvent.removeMonitor(m); drawerGlobalMonitor = nil }
+        drawerMoveMonitors.forEach { NSEvent.removeMonitor($0) }
+        drawerMoveMonitors = []
+    }
+
+    /// How far past the drawer, its capsules and the bar the pointer may go before the drawer
+    /// closes by itself.
+    static let drawerDismissDistance: CGFloat = 150
+
+    /// Closes the drawer once the pointer is `drawerDismissDistance` from everything it belongs
+    /// to: the plate, the capsules and the bar. Not during a drag (the spring logic owns that).
+    private func dismissDrawerIfPointerFar() {
+        guard drawerWantsOpen, dragController.draggingPayload == nil,
+              NSEvent.pressedMouseButtons == 0,
+              let drawer = drawerPanel, drawer.isVisible else { return }
+        let mouse = NSEvent.mouseLocation
+        let areas = [Self.drawerPlateFrame(drawer.frame), capsulePanel?.frame, dockPanel?.frame].compactMap { $0 }
+        let near = areas.contains { $0.insetBy(dx: -Self.drawerDismissDistance, dy: -Self.drawerDismissDistance).contains(mouse) }
+        if !near { closeDrawer() }
+    }
+
     private func dismissDrawerIfOutside() {
-        guard dragController.draggingPayload == nil else { return }   // 拖动中不误关
+        if dragController.draggingPayload != nil {   // 拖动中不误关
+            // A new click means the drag's button was released: a payload still set is at most a
+            // landing flight, or one that outlived its drag and would keep the drawer open.
+            Logger(subsystem: "com.caye.macosdockcc.v2", category: "drawer")
+                .error("click outside the drawer ignored: a drag payload is still set")
+            return
+        }
         guard let drawer = drawerPanel, drawer.isVisible,
               let dock   = dockPanel else { return }
         let mouse = NSEvent.mouseLocation

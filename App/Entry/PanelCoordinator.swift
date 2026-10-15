@@ -134,6 +134,8 @@ final class PanelCoordinator: NSObject {
     var isSuspendedForPermissionLoss = false
     var drawerLocalMonitor: Any?
     var drawerGlobalMonitor: Any?
+    /// Pointer-move monitors while the drawer is open: moving far enough away closes it.
+    var drawerMoveMonitors: [Any] = []
     // MARK: 文件夹/中转弹窗状态（单面板复用 = 天然「同时只有一个弹窗」）
     /// 共享弹窗当前装的内容：固定文件夹网格或中转网格。
     enum PopupContent: Equatable {
