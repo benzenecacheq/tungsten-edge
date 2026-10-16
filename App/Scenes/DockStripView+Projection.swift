@@ -56,8 +56,10 @@ extension DockStripView {
             return true
         }
 
-        var messaging: [StripEntry] = []
-        var absorbedWindowIDs = Set<String>()
+        // A pinned app's windows all join the live order (rendered in its group, see `pinnedWindows`);
+        // its tile shows the first of them, so dragging a window to the top makes it the tile. The
+        // main-window rule only decides where a newly seen window goes: first in its group.
+        var tileLeadIDs = Set<String>()
         for bid in msg {
             let appWindows = items.filter { $0.bundleIdentifier == bid && !$0.isAppLevelFallback }
             // 认主窗口的三条规则在纯 `MessagingMainWindowDecision` 里（标题匹配 → 排除后唯一 → 认不出）；
@@ -74,11 +76,10 @@ extension DockStripView {
                 titleMatchesAppName: { AppDisplayNameResolver.titleMatchesAppName($0, bundleID: bid) }
             )
             let main = appWindows.first { $0.id == mainID }
-            if let main { absorbedWindowIDs.insert(main.id) }
+            if let main { tileLeadIDs.insert(main.id) }
             if main == nil || appWindows.count > 1 {
                 MessagingZoneDiagnostics.record(bundleID: bid, windows: appWindows, mainID: main?.id)
             }
-            messaging.append(.messagingApp(bundleID: bid, mainWindow: main))
         }
 
         // Live zone: real windows (including kept app windows) + kept app placeholders
@@ -86,7 +87,6 @@ extension DockStripView {
         for item in items {
             guard !msgSet.contains(item.bundleIdentifier ?? "") else {
                 if item.isAppLevelFallback { continue }     // app chip replaces the app-* fallback
-                if absorbedWindowIDs.contains(item.id) { continue }
                 liveNatural.append(.window(item))
                 continue
             }
@@ -128,10 +128,19 @@ extension DockStripView {
         let order = stripOrderStore.reconciled(
             current: liveOrderIDs,
             appKeyOf: appKeys,
-            headPreferred: Set(messagingStore.bundleIDs)
+            headPreferred: Set(messagingStore.bundleIDs),
+            leading: tileLeadIDs
         )
         let byID = Dictionary(projectedLive.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let orderedLive = order.compactMap { byID[$0] }
+        // Each pinned app's tile: the first of its windows in the order (nil = none).
+        let messaging: [StripEntry] = msg.map { bid in
+            let first = orderedLive.lazy.compactMap { entry -> StripItem? in
+                guard case let .window(item) = entry, item.bundleIdentifier == bid else { return nil }
+                return item
+            }.first
+            return .messagingApp(bundleID: bid, mainWindow: first)
+        }
         if HoverTrace.isEnabled, dragController.carriedPayload != nil {
             HoverTrace.liveOrder(orderedLive.map(\.id))
         }
@@ -266,15 +275,19 @@ extension DockStripView {
         // When only this desktop's windows show, a tile whose window is on another desktop takes
         // the app's first window here instead (drawn as the tile, not after it), or else draws as
         // the app icon (no dot, see `appsRunningElsewhere`). Rendering only, like `pinnedWindows`.
-        var promotedWindowIDs = Set<String>()
-        let shownMessaging = !currentDesktopOnly ? messaging : messaging.map { tile -> StripEntry in
-            guard case let .messagingApp(bid, main?) = tile, !main.isOnCurrentDesktop else { return tile }
+        // The tile takes the first of the app's windows this bar shows; with none here it keeps
+        // the app's first window anywhere (another screen), or with only this desktop's windows
+        // showing, none: the app icon.
+        var tileWindowIDs = Set<String>()
+        let shownMessaging = messaging.map { tile -> StripEntry in
+            guard case let .messagingApp(bid, main) = tile else { return tile }
             let here = pinnedWindows.lazy.compactMap { entry -> StripItem? in
                 guard case let .window(item) = entry, item.bundleIdentifier == bid else { return nil }
                 return item
             }.first
-            if let here { promotedWindowIDs.insert(here.id) }
-            return .messagingApp(bundleID: bid, mainWindow: here)
+            let shown = here ?? (currentDesktopOnly ? nil : main)
+            if let shown { tileWindowIDs.insert(shown.id) }
+            return .messagingApp(bundleID: bid, mainWindow: shown)
         }
         let headTiles = !taskbarEdge.isVertical ? shownMessaging
             : shownMessaging.filter { $0.id == "msg-app-\(appsLauncherID)" }
@@ -293,7 +306,7 @@ extension DockStripView {
                 ? [.divider(id: StripEntry.pinnedDividerID(after: bid))] : []
             return [tile] + pinnedWindows.filter { entry in
                 if case let .window(item) = entry {
-                    return item.bundleIdentifier == bid && !promotedWindowIDs.contains(item.id)
+                    return item.bundleIdentifier == bid && !tileWindowIDs.contains(item.id)
                 }
                 return false
             } + divider
@@ -367,7 +380,8 @@ extension DockStripView {
             snapshotItems: snapshotItems,
             snapshotBundleIDs: snapshotBundleIDs,
             hiddenBundleIDs: hiddenBundleIDs,
-            messaging: messaging,
+            messaging: shownMessaging,
+            tileLeadIDs: tileLeadIDs,
             liveNatural: projectedLive,
             liveOrderIDs: liveOrderIDs,
             appKeyByChipID: appKeys,

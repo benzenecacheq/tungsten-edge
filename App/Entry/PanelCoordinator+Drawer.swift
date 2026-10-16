@@ -122,9 +122,10 @@ extension PanelCoordinator {
     }
 
     /// The pointer entered or left a capsule: show its drawer's name in the title bubble.
-    func drawerCapsuleHoverChanged(_ drawerID: String, hovering: Bool) {
+    /// `title` = what the pointer is over (an app's name, or the drawer's); nil = it left.
+    func drawerCapsuleHoverChanged(_ drawerID: String, title: String?) {
         let chipID = "drawer-capsule-\(drawerID)"
-        guard hovering else {
+        guard let title else {
             handleWindowTitleTooltipEvent(.exit(chipID: chipID))
             return
         }
@@ -133,7 +134,7 @@ extension PanelCoordinator {
               let slot = capsuleSlots(inGroup: group).first(where: { $0.drawerID == drawerID }) else { return }
         let visible = slot.frame.insetBy(dx: Self.shadowPadding, dy: Self.shadowPadding)
         handleWindowTitleTooltipEvent(.update(WindowTitleTooltipRequest(
-            chipID: chipID, title: drawerStore.displayName(of: drawerID), anchorVisibleRect: visible)))
+            chipID: chipID, title: title, anchorVisibleRect: visible)))
     }
 
     // MARK: - Arrow

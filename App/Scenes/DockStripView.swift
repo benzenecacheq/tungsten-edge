@@ -447,7 +447,7 @@ struct DockStripView: View {
             updateDrawerToStripConvert(projection: projection)
             updateStripBlockReorder(projection: projection)
             updateLiveReorder(projection: projection)
-            updateMessagingReorder(messagingIDs: projection.messagingIDs)
+            updateMessagingReorder(projection: projection)
             updateFolderReorder()
             syncConvertedCarrier(projection: projection)
             syncReleasedMessagingCarrier(projection: projection)
@@ -646,6 +646,7 @@ struct DockStripView: View {
         }
         stripOrderStore.sync(current: current, appKeyOf: appKeys,
                              headPreferred: Set(messagingStore.bundleIDs),
+                             leading: projection.tileLeadIDs,
                              projectionSample: sample)
         // 拖动中被拖窗口消失 → 取消拖动，免得空位卡死。(松手无回调那条由 DragController 的轮询兜底。)
         if let p = dragController.draggingPayload, p.source == .strip, !current.contains(p.id) {
@@ -657,12 +658,25 @@ struct DockStripView: View {
     /// (excluding the dragged chip itself), and place the dragged chip on the half the finger is
     /// in. Drives the existing `stripLayoutKeys` spring so the others slide aside as the gap moves.
     /// 全帧命中（不只看 x）：手指抬向胶囊/抽屉时 y 已离开条内行，contains 不命中 → 不误改顺序（Codex 二审）。
+    /// A pinned app's extra windows (drawn under its tile) reorder among themselves only; every
+    /// other card among the unpinned live zone.
     private func reorderTarget(at point: CGPoint, dragging id: String, current: [String],
-                               pinned: Set<String>) {
-        guard !pinned.contains(id) else { return }
+                               projection: StripProjection) {
+        let pinned = projection.pinnedWindowIDs
+        let appKeyOf = projection.appKeyByChipID
+        let isPinned = pinned.contains(id)
+        let eligible: (String) -> Bool = isPinned
+            ? { pinned.contains($0) && appKeyOf[$0] != nil && appKeyOf[$0] == appKeyOf[id] }
+            : { !pinned.contains($0) }
         let point = barPoint(point)
+        // Onto its app's tile: the window goes first in the group, so the tile shows it.
+        if isPinned, let bid = appKeyOf[id], let tile = tileWindowID(of: bid, projection: projection), tile != id,
+           let frame = messagingChipFrames[bid].map(barFrame), frame.contains(point) {
+            stripOrderStore.reorder(draggedID: id, relativeTo: tile, after: false, current: current)
+            return
+        }
         guard let hit = barFrames(chipFrames).first(where: { kv in
-            kv.key != id && !pinned.contains(kv.key) && kv.value.contains(point)
+            kv.key != id && eligible(kv.key) && kv.value.contains(point)
         }) else { return }
         stripOrderStore.reorder(draggedID: id, relativeTo: hit.key,
                                 after: point.x > hit.value.midX, current: current)
@@ -677,8 +691,7 @@ struct DockStripView: View {
         let dc = dragController
         guard let p = dc.draggingPayload, p.source == .strip, !dc.isOverDropZone,
               let pt = stripPoint(from: dc.globalLocation) else { return }
-        reorderTarget(at: pt, dragging: p.id, current: projection.liveOrderIDs,
-                      pinned: projection.pinnedWindowIDs)
+        reorderTarget(at: pt, dragging: p.id, current: projection.liveOrderIDs, projection: projection)
     }
 
     /// 文件夹区内重排的唯一驱动，同上。
@@ -805,9 +818,12 @@ struct DockStripView: View {
                 return chipFrames[cid].map(stripFrameToScreen)
             }
             switch p.source {
-            case .strip:  return chipFrames[p.id].map(stripFrameToScreen)
+            // A pinned app's window dragged to the top of its group lands as the app's tile.
+            case .strip:  return (chipFrames[p.id] ?? messagingChipFrames[p.bundleID]).map(stripFrameToScreen)
             case .folder: return folderChipFrames[p.id].map(stripFrameToScreen)
-            case .messaging: return messagingChipFrames[p.bundleID].map(stripFrameToScreen)
+            // A tile's window moved down its group lands in that window's card.
+            case .messaging: return (p.item.flatMap { chipFrames[$0.id] } ?? messagingChipFrames[p.bundleID])
+                .map(stripFrameToScreen)
             case .drawer: return nil   // 还没转正 → 落点在抽屉里，抽屉侧自己写
             }
         }()
@@ -969,6 +985,29 @@ struct DockStripView: View {
         return nil
     }
 
+    /// The window a dragged pinned tile showed when it was picked up. It can move down its app's
+    /// group, and then the slot it left empty is that window's card, not the tile.
+    private var draggedTileWindowID: String? {
+        guard ownsActiveDrag, let p = dragController.hiddenSlotPayload, p.source == .messaging else { return nil }
+        return p.item?.id
+    }
+
+    /// The window a pinned app's tile shows now.
+    private func tileWindowID(of bundleID: String, projection: StripProjection) -> String? {
+        for case let .messagingApp(bid, main) in projection.messaging where bid == bundleID { return main?.id }
+        return nil
+    }
+
+    /// A pinned tile is an empty slot while it is dragged with the window it shows, or while the
+    /// window it shows is a card being dragged to the top of the group.
+    private func isTileSlotHidden(_ bundleID: String, main: StripItem?, projection: StripProjection) -> Bool {
+        if draggingMessagingBundleID == bundleID {
+            guard let carried = draggedTileWindowID else { return true }
+            return main == nil || main?.id == carried
+        }
+        return main != nil && main?.id == projection.draggingID
+    }
+
     /// 当前消息区可见 chip 的 bundleID（区内显示序）。喂重排遍历 + 拖动中消失清理。
     /// 消息区范围（"strip" 空间）：现有消息 chip 帧的并集；区空时退化为条头一小段
     /// （释放后消息区在条头物化）。抽屉消息应用的释放判定用它,不认"离开抽屉体"（Codex 评审 P1-3）。
@@ -984,12 +1023,30 @@ struct DockStripView: View {
 
     /// 消息区内重排：命中其他消息 chip 帧（外扩 6pt 盖住格间空隙）,按左/右半落位。
     /// 按区内显示序遍历取最左（dict 顺序不定,外扩后相邻帧会重叠——同抽屉）。悬在投放区（胶囊/抽屉）时不重排。
-    private func updateMessagingReorder(messagingIDs: [String]) {
+    private func updateMessagingReorder(projection: StripProjection) {
         let dc = dragController
         guard let p = dc.draggingPayload, p.source == .messaging,
               !dc.isOverDropZone,
               let pt = stripPoint(from: dc.globalLocation).map(barPoint) else { return }
-        for bid in messagingIDs where bid != p.bundleID {
+        // Over its own group: the window the tile carried moves among the app's windows (onto the
+        // tile = back to the top). Anywhere else the whole app moves among the pinned apps.
+        if let carried = p.item?.id, projection.liveOrderIDs.contains(carried) {
+            let current = projection.liveOrderIDs
+            if let tile = tileWindowID(of: p.bundleID, projection: projection), tile != carried,
+               let f = messagingChipFrames[p.bundleID].map(barFrame), f.contains(pt) {
+                stripOrderStore.reorder(draggedID: carried, relativeTo: tile, after: false, current: current)
+                return
+            }
+            if let hit = barFrames(chipFrames).first(where: { kv in
+                kv.key != carried && projection.pinnedWindowIDs.contains(kv.key)
+                    && projection.appKeyByChipID[kv.key] == p.bundleID && kv.value.contains(pt)
+            }) {
+                stripOrderStore.reorder(draggedID: carried, relativeTo: hit.key,
+                                        after: pt.x > hit.value.midX, current: current)
+                return
+            }
+        }
+        for bid in projection.messagingIDs where bid != p.bundleID {
             guard let f = messagingChipFrames[bid].map(barFrame), f.insetBy(dx: -6, dy: -6).contains(pt) else { continue }
             messagingStore.reorder(draggedID: p.bundleID, relativeTo: bid, after: pt.x > f.midX)
             return
@@ -1112,7 +1169,7 @@ struct DockStripView: View {
         switch entry {
         case let .window(item):
             stripEntryView(entry, projection: projection)
-                .opacity(projection.draggingID == item.id ? 0 : 1)
+                .opacity(projection.draggingID == item.id || draggedTileWindowID == item.id ? 0 : 1)
                 // Frame in the shared `"strip"` space via a **background** GeometryReader — doesn't
                 // affect layout and doesn't steal clicks (an overlay with a hittable Color.clear
                 // intercepts taps — the original slice-3 bug). Feeds both the floating copy's
@@ -1163,13 +1220,13 @@ struct DockStripView: View {
                         }
                         .onEnded { _ in dragController.endDrag() }
                 )
-        case let .messagingApp(bid, _):
+        case let .messagingApp(bid, main):
             // 消息区 chip 可拖：区内重排 + 拖进抽屉收纳（owner 2026-07-11）。帧上报进**独立**的
             // MessagingChipFramePreferenceKey（绝不混 chipFrames,同文件夹 chip 的隔离理由）。
             // 手势**只负责起拖一次**：重排会挪动本 chip、SwiftUI 随即取消手势 → 区内重排由
             // updateMessagingReorder() 按全局鼠标驱动（同抽屉教训,Codex 评审 P1-4）。
             stripEntryView(entry, projection: projection)
-                .opacity(draggingMessagingBundleID == bid ? 0 : 1)
+                .opacity(isTileSlotHidden(bid, main: main, projection: projection) ? 0 : 1)
                 .background(
                     GeometryReader { geo in
                         Color.clear.preference(key: MessagingChipFramePreferenceKey.self,
@@ -1194,8 +1251,9 @@ struct DockStripView: View {
                                 CGSize(width: $0.midX - value.startLocation.x,
                                        height: $0.midY - value.startLocation.y)
                             } ?? .zero
+                            // `item` = the window the tile shows: it can be dragged down its group.
                             let payload = DragPayload(source: .messaging, id: bid,
-                                                      bundleID: bid, item: nil,
+                                                      bundleID: bid, item: main,
                                                       visualKind: .messagingIcon,
                                                       canExternalDrop: true)
                             dragController.beginDrag(payload: payload, stripSurfaceID: stripSurfaceID,
@@ -1552,7 +1610,7 @@ struct DockStripView: View {
                      showRunningDot: true,
                      pulseNonce: chipPulseNonces[item.id] ?? 0,
                      badgeText: windowBadge,
-                     slotHidden: projection.draggingID == item.id)
+                     slotHidden: projection.draggingID == item.id || draggedTileWindowID == item.id)
         case .divider:
             // Every divider takes the room Divider Space sets (at least the original gap).
             let sidePadding = max((CGFloat(settingsStore.dividerSpace) - 1) / 2 - Style.chipSpacing,
@@ -1625,7 +1683,7 @@ struct DockStripView: View {
                              showsWindowListInMenu: true,
                              iconOnly: true, showRunningDot: true,
                              badgeText: badge,
-                             slotHidden: draggingMessagingBundleID == bid)
+                             slotHidden: isTileSlotHidden(bid, main: main, projection: projection))
                 } else {
                     // 无主窗两态：运行中（关窗/常驻）→ 点击 reopen 主窗；未运行（图标下方无运行点）→ 点击启动。
                     // 统一模型下消息应用也有「在程序坞中保留」勾选（与「取消标记」并存），由纯投影决定。

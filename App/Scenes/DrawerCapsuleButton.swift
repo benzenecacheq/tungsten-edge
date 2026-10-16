@@ -17,8 +17,9 @@ struct DrawerCapsuleStack: View {
     /// The capsule's drawer was toggled (the expand cell, or a cell with no app).
     let action: (String) -> Void
     let onPrimaryAction: () -> Void
-    /// The pointer entered (true) or left (false) a capsule.
-    var onHoverChanged: (String, Bool) -> Void = { _, _ in }
+    /// What the pointer is over on a capsule: the tooltip text (an app's name, or the drawer's
+    /// name off the apps), or nil once it has left.
+    var onHoverChanged: (String, String?) -> Void = { _, _ in }
 
     /// The capsule being dragged to a new place, and how far along the stack it has moved.
     @State private var draggedID: String?
@@ -64,7 +65,7 @@ struct DrawerCapsuleStack: View {
         DragGesture(minimumDistance: 6, coordinateSpace: .global)
             .onChanged { value in
                 guard drawerStore.drawers.count > 1 else { return }
-                if draggedID == nil { onHoverChanged(drawerID, false) }
+                if draggedID == nil { onHoverChanged(drawerID, nil) }
                 draggedID = drawerID
                 // Global coordinates grow down the screen, as the stack's order does.
                 dragDistance = vertical ? value.translation.height : value.translation.width
@@ -152,8 +153,9 @@ struct DrawerCapsuleButton: View {
     /// An app cell dispatched an "open" (launch / unhide): an open drawer closes, exactly as
     /// after a tap inside it. No default — an omission would leave the drawer open.
     let onPrimaryAction: () -> Void
-    /// The pointer entered (true) or left (false) the capsule: its drawer's name shows meanwhile.
-    var onHoverChanged: (Bool) -> Void = { _ in }
+    /// The tooltip for what the pointer is over: the app's name on an app cell, the drawer's name
+    /// anywhere else on the capsule, nil once the pointer has left.
+    var onHoverChanged: (String?) -> Void = { _ in }
     /// True while (or just after) the capsule is dragged to reorder: a click then does nothing.
     var isTapSuppressed: () -> Bool = { false }
 
@@ -250,12 +252,21 @@ struct DrawerCapsuleButton: View {
         // goes back to the first page.
         .onChange(of: hoveredCell == nil) { away in
             pager.pointerAway = away
-            onHoverChanged(!away)
         }
+        .onChange(of: hoverTitle(ids: ids, apps: apps)) { onHoverChanged($0) }
         // MenuHostNSView takes only right / Control-clicks and lets left clicks through to the
         // cells above, so a right click anywhere on the capsule is the Tungsten menu — the
         // settings fallback entry keeps the whole capsule.
         .overlay(NativeMenuHost(popUpHandler: onRequestTaskbarMenu))
+    }
+
+    /// The tooltip for the hovered cell (see `onHoverChanged`).
+    private func hoverTitle(ids: [String], apps: [String]) -> String? {
+        guard let cell = hoveredCell else { return nil }
+        let shown = isRow ? rowApps(ids) : Array(apps.prefix(DrawerCapsulePreviewMetrics.appSlots))
+        return cell < shown.count
+            ? AppDisplayNameResolver.displayName(for: shown[cell])
+            : drawerStore.displayName(of: drawerID)
     }
 
     /// A drag would file into this capsule's drawer: the pointer is over a drop zone and this
@@ -390,7 +401,6 @@ struct DrawerCapsuleButton: View {
                     }),
                 isEnabled: !isLaunching && !isMidTurn
             )
-            .help(bundleID.map { AppDisplayNameResolver.displayName(for: $0) } ?? "")
     }
 
     /// Same default tap as a drawer icon: launch / bring forward / hide when frontmost.

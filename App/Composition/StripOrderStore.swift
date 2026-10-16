@@ -117,7 +117,7 @@ final class StripOrderStore: ObservableObject {
     /// 内 anchor 参与定位——否则退出/重开的新 `app-*`/`tabgrp-*` 首帧尾插、被 spring 拉回 = 影子滑动。
     /// anchor 只用于把新 id 定位到同 app 同伴旁，算完即从可见输出滤除（用户只看到真实 current）。
     func reconciled(current: [String], appKeyOf: [String: String] = [:],
-                    headPreferred: Set<String> = []) -> [String] {
+                    headPreferred: Set<String> = [], leading: Set<String> = []) -> [String] {
         var merged = stickyAppKeys
         merged.merge(appKeyOf) { _, new in new }
         let currentSet = Set(current)
@@ -129,7 +129,8 @@ final class StripOrderStore: ObservableObject {
             current: effectiveCurrent,
             appKeyOf: merged,
             headPreferredKeys: headPreferred,
-            stableKeptRanks: stableKeptRanks
+            stableKeptRanks: stableKeptRanks,
+            leadingIDs: leading
         )
         let anchorSet = Set(anchors)
         return ordered.filter { !anchorSet.contains($0) }
@@ -163,6 +164,7 @@ final class StripOrderStore: ObservableObject {
         current: [String],
         appKeyOf: [String: String] = [:],
         headPreferred: Set<String> = [],
+        leading: Set<String> = [],
         projectionSample: InventoryOrderProjectionSample? = nil
     ) {
         let now = self.now()
@@ -198,7 +200,8 @@ final class StripOrderStore: ObservableObject {
             current: effectiveCurrent,
             appKeyOf: stickyAppKeys,
             headPreferredKeys: headPreferred,
-            stableKeptRanks: stableKeptRanks
+            stableKeptRanks: stableKeptRanks,
+            leadingIDs: leading
         )
         var next = reconcileResult.order
         absentSince = absentSince.filter { now.timeIntervalSince($0.value) <= Self.rankRetentionGrace }

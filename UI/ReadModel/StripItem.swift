@@ -202,6 +202,7 @@ struct StripItem: Hashable {
 enum StripOrdering {
     enum PlacementReason: String, Codable, Equatable {
         case sameAppSibling
+        case leadsApp
         case headPreferred
         case stableKeptRank
         case tail
@@ -229,15 +230,19 @@ enum StripOrdering {
     /// 消息应用的弹出窗口紧邻消息区落地（owner 2026-07-12 #4）。只影响没记过的新 id；已记住的保持原位。
     /// `stableKeptRanks`：普通 kept 应用的跨重启排名（appKey → 名次）。无同伴、非 head-preferred 的
     /// 新 id 若属于排名内的应用，按名次落在已有排名卡之间，而非甩到末尾。
+    /// `leadingIDs`: a **new** id here goes before its app's first card instead of after its
+    /// last (a pinned app's main window: its app's tile shows the first of its windows).
     static func reconcile(remembered: [String], current: [String], appKeyOf: [String: String] = [:],
                           headPreferredKeys: Set<String> = [],
-                          stableKeptRanks: [String: Int] = [:]) -> [String] {
+                          stableKeptRanks: [String: Int] = [:],
+                          leadingIDs: Set<String> = []) -> [String] {
         reconcileWithTrace(
             remembered: remembered,
             current: current,
             appKeyOf: appKeyOf,
             headPreferredKeys: headPreferredKeys,
-            stableKeptRanks: stableKeptRanks
+            stableKeptRanks: stableKeptRanks,
+            leadingIDs: leadingIDs
         ).order
     }
 
@@ -246,7 +251,8 @@ enum StripOrdering {
         current: [String],
         appKeyOf: [String: String] = [:],
         headPreferredKeys: Set<String> = [],
-        stableKeptRanks: [String: Int] = [:]
+        stableKeptRanks: [String: Int] = [:],
+        leadingIDs: Set<String> = []
     ) -> ReconcileResult {
         let currentSet = Set(current)
         let rememberedSet = Set(remembered)
@@ -260,7 +266,10 @@ enum StripOrdering {
         // 彼此也保持相对序。
         for id in current where !rememberedSet.contains(id) {
             let app = appKeyOf[id]
-            if let app, let pos = result.lastIndex(where: { appKeyOf[$0] == app }) {
+            if let app, leadingIDs.contains(id), let pos = result.firstIndex(where: { appKeyOf[$0] == app }) {
+                result.insert(id, at: pos)
+                placements.append(Placement(chipID: id, index: pos, reason: .leadsApp))
+            } else if let app, let pos = result.lastIndex(where: { appKeyOf[$0] == app }) {
                 result.insert(id, at: pos + 1)
                 placements.append(Placement(chipID: id, index: pos + 1, reason: .sameAppSibling))
             } else if let app, headPreferredKeys.contains(app) {

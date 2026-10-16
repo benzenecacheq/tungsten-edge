@@ -60,6 +60,8 @@ struct StripProjection {
     let snapshotBundleIDs: Set<String>
     let hiddenBundleIDs: Set<String>
     let messaging: [StripEntry]
+    /// Pinned apps' main windows: a new one goes first in its app's group (`StripOrdering.reconcile`).
+    let tileLeadIDs: Set<String>
     let liveNatural: [StripEntry]
     let liveOrderIDs: [String]
     let appKeyByChipID: [String: String]

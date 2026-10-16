@@ -191,8 +191,8 @@ extension PanelCoordinator {
                 usesLiquidGlass: usesLiquidGlass,
                 action: { [weak self] drawerID in self?.toggleDrawer(drawerID) },
                 onPrimaryAction: { [weak self] in self?.closeDrawerAfterAction() },
-                onHoverChanged: { [weak self] drawerID, hovering in
-                    self?.drawerCapsuleHoverChanged(drawerID, hovering: hovering)
+                onHoverChanged: { [weak self] drawerID, title in
+                    self?.drawerCapsuleHoverChanged(drawerID, title: title)
                 }
             )
                 .environmentObject(runtime)

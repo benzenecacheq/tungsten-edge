@@ -160,4 +160,29 @@ final class MessagingWindowOrderingTests: XCTestCase {
         let postSync = store.reconciled(current: ["n1", "m2"], appKeyOf: newKeys, headPreferred: msg)
         XCTAssertEqual(firstFrame, postSync)
     }
+
+    // MARK: - Pinned app groups
+
+    /// A pinned app's main window seen for the first time leads its group (the tile shows it),
+    /// even after windows already in the order.
+    func testNewMainWindowLeadsItsAppsGroup() {
+        let keys = ["n1": "com.normal", "w1": "com.msg", "w2": "com.msg", "main": "com.msg"]
+        let result = StripOrdering.reconcile(
+            remembered: ["n1", "w1", "w2"],
+            current: ["n1", "w1", "w2", "main"],
+            appKeyOf: keys,
+            headPreferredKeys: msg,
+            leadingIDs: ["main"]
+        )
+        XCTAssertEqual(result, ["n1", "main", "w1", "w2"])
+    }
+
+    /// Once the user has moved it, the main window keeps the place they gave it.
+    func testRememberedMainWindowKeepsItsPlace() {
+        let keys = ["w1": "com.msg", "main": "com.msg"]
+        let moved = StripOrdering.reordering(["main", "w1"], move: "w1", relativeTo: "main", after: false)
+        let result = StripOrdering.reconcile(remembered: moved, current: ["main", "w1"], appKeyOf: keys,
+                                             headPreferredKeys: msg, leadingIDs: ["main"])
+        XCTAssertEqual(result, ["w1", "main"])
+    }
 }
