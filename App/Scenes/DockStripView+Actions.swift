@@ -153,7 +153,7 @@ extension DockStripView {
     }
 
     static func reopenMainWindow(bundleID: String) {
-        let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        let runningApps = CrossOverLauncherIndex.runningApplications(withBundleIdentifier: bundleID)
             .filter {
                 $0.activationPolicy == .regular
                     && ProcessLiveness.isAlive(pid: $0.processIdentifier)

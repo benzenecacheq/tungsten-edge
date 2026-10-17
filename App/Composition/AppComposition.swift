@@ -791,7 +791,7 @@ final class AppRuntime: ObservableObject {
                 bundleDeclaresNoWindow: session.bundleDeclaresNoWindow
             )
         }
-        let hasOtherRegularProcess = NSRunningApplication
+        let hasOtherRegularProcess = CrossOverLauncherIndex
             .runningApplications(withBundleIdentifier: bundleID)
             .contains { app in
                 app.processIdentifier != targetPID
@@ -891,7 +891,7 @@ final class AppRuntime: ObservableObject {
         bundleID: String,
         bundleDeclaresNoWindow: Bool
     ) -> NSRunningApplication? {
-        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first { app in
+        CrossOverLauncherIndex.runningApplications(withBundleIdentifier: bundleID).first { app in
             ProcessLiveness.isAlive(pid: app.processIdentifier)
                 && LaunchGateDecision.runningProcessNeedsNoSession(
                     activationPolicy: launchActivationPolicy(app.activationPolicy),

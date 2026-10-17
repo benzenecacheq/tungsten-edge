@@ -136,7 +136,7 @@ enum AppMenuBuilder {
             if let onForceQuit {
                 onForceQuit()
             } else {
-                NSRunningApplication
+                CrossOverLauncherIndex
                     .runningApplications(withBundleIdentifier: bid)
                     .first?
                     .forceTerminate()

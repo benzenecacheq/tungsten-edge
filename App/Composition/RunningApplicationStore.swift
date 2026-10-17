@@ -414,7 +414,7 @@ final class RunningApplicationStore: ObservableObject {
               recheck.identity == identity,
               processGeneration(pid: pid) == identity.generation,
               recheck.application.processIdentifier == pid,
-              recheck.application.bundleIdentifier == identity.bundleID else {
+              CrossOverLauncherIndex.bundleID(for: recheck.application) == identity.bundleID else {
             cancelPolicyRecheck(forPID: pid, token: token)
             return false
         }
@@ -503,7 +503,7 @@ final class RunningApplicationStore: ObservableObject {
     }
 
     private func processIdentity(for application: NSRunningApplication) -> ProcessIdentity? {
-        guard let bundleID = application.bundleIdentifier, !bundleID.isEmpty,
+        guard let bundleID = CrossOverLauncherIndex.bundleID(for: application), !bundleID.isEmpty,
               let generation = processGeneration(pid: application.processIdentifier) else { return nil }
         return ProcessIdentity(generation: generation, bundleID: bundleID)
     }
@@ -551,7 +551,7 @@ final class RunningApplicationStore: ObservableObject {
         } else {
             observations = liveApplications.compactMap { application in
                 let pid = application.processIdentifier
-                guard let bundleID = application.bundleIdentifier, !bundleID.isEmpty,
+                guard let bundleID = CrossOverLauncherIndex.bundleID(for: application), !bundleID.isEmpty,
                       let generation = processGeneration(pid: pid) else { return nil }
                 return RunningStateSweepDecision.Observation(
                     generation: generation,
@@ -660,7 +660,7 @@ final class RunningApplicationStore: ObservableObject {
         let currentGeneration = processGeneration(pid: pid)
         var observationsByPID: [pid_t: RunningStateSweepDecision.Observation] = [:]
         if let currentGeneration,
-           let bundleID = application.bundleIdentifier, !bundleID.isEmpty {
+           let bundleID = CrossOverLauncherIndex.bundleID(for: application), !bundleID.isEmpty {
             let isRegular = application.activationPolicy == .regular
             observationsByPID[pid] = RunningStateSweepDecision.Observation(
                 generation: currentGeneration,

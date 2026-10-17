@@ -378,7 +378,7 @@ struct LauncherChip: View {
     }
 
     private static func regularRunningApplications(bundleID: String) -> [NSRunningApplication] {
-        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).filter {
+        CrossOverLauncherIndex.runningApplications(withBundleIdentifier: bundleID).filter {
             $0.activationPolicy == .regular
                 && ProcessLiveness.isAlive(pid: $0.processIdentifier)
         }

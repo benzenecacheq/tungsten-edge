@@ -1412,7 +1412,7 @@ final class AppTracker: ObservableObject {
 
         apps[pid] = AppEntry(
             pid: pid,
-            bundleIdentifier: app.bundleIdentifier,
+            bundleIdentifier: CrossOverLauncherIndex.bundleID(for: app),
             appName: app.localizedName ?? app.bundleIdentifier ?? "\(pid)",
             activationPolicy: app.activationPolicy,
             executablePath: app.executableURL?.path,
@@ -1581,7 +1581,7 @@ final class AppTracker: ObservableObject {
 
     private func eligibilityApplication(for app: NSRunningApplication) -> AppTrackerWindowEligibility.Application {
         AppTrackerWindowEligibility.Application(
-            bundleIdentifier: app.bundleIdentifier,
+            bundleIdentifier: CrossOverLauncherIndex.bundleID(for: app),
             appName: app.localizedName ?? app.bundleIdentifier ?? "\(app.processIdentifier)",
             activationPolicy: app.activationPolicy,
             executablePath: app.executableURL?.path

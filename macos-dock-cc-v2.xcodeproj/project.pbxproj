@@ -302,6 +302,7 @@
 		A00000000000000000009561 /* KeptAppPositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009560 /* KeptAppPositionTests.swift */; };
 		A00000000000000000009571 /* DrawerOrderStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009570 /* DrawerOrderStoreTests.swift */; };
 		A00000000000000000009771 /* MessagingWindowOrderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009770 /* MessagingWindowOrderingTests.swift */; };
+		B779642DC57DD1DF202083F7 /* CrossOverLauncherIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA434B125260AC170C0522B /* CrossOverLauncherIndexTests.swift */; };
 		A00000000000000000009502 /* KeptAppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009500 /* KeptAppStore.swift */; };
 		A00000000000000000009522 /* AppMembershipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009520 /* AppMembershipController.swift */; };
 		A00000000000000000001047 /* DrawerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000006B /* DrawerStore.swift */; };
@@ -470,7 +471,9 @@
 		C90000000000000000000008 /* ChipPressFeedbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C90000000000000000000007 /* ChipPressFeedbackTests.swift */; };
 		A00000000000000000009E15 /* AXWindowMatchPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000064 /* AXWindowMatchPolicy.swift */; };
 		A00000000000000000009E16 /* ProcessLiveness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009E03 /* ProcessLiveness.swift */; };
+		766A685DC99E562485499976 /* CrossOverLauncherIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6054FBBEAC3E8BAFDAE8866C /* CrossOverLauncherIndex.swift */; };
 		A00000000000000000009E17 /* ProcessLiveness.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009E03 /* ProcessLiveness.swift */; };
+		8785AD4C3F7E420B93903E80 /* CrossOverLauncherIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6054FBBEAC3E8BAFDAE8866C /* CrossOverLauncherIndex.swift */; };
 		A00000000000000000009E18 /* ProcessLivenessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009E04 /* ProcessLivenessTests.swift */; };
 		A00000000000000000000B91 /* FeedbackTickPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000B90 /* FeedbackTickPolicyTests.swift */; };
 		A00000000000000000009E19 /* ScanAdmissionDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009E05 /* ScanAdmissionDecision.swift */; };
@@ -628,6 +631,7 @@
 		C90000000000000000000009 /* AXElementCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXElementCacheTests.swift; sourceTree = "<group>"; };
 		C90000000000000000000007 /* ChipPressFeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipPressFeedbackTests.swift; sourceTree = "<group>"; };
 		A00000000000000000009E03 /* ProcessLiveness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessLiveness.swift; sourceTree = "<group>"; };
+		6054FBBEAC3E8BAFDAE8866C /* CrossOverLauncherIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossOverLauncherIndex.swift; sourceTree = "<group>"; };
 		A00000000000000000009E04 /* ProcessLivenessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessLivenessTests.swift; sourceTree = "<group>"; };
 		A00000000000000000000B90 /* FeedbackTickPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackTickPolicyTests.swift; sourceTree = "<group>"; };
 		A00000000000000000009E05 /* ScanAdmissionDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanAdmissionDecision.swift; sourceTree = "<group>"; };
@@ -876,6 +880,7 @@
 		A00000000000000000009560 /* KeptAppPositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeptAppPositionTests.swift; sourceTree = "<group>"; };
 		A00000000000000000009570 /* DrawerOrderStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawerOrderStoreTests.swift; sourceTree = "<group>"; };
 		A00000000000000000009770 /* MessagingWindowOrderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagingWindowOrderingTests.swift; sourceTree = "<group>"; };
+		5EA434B125260AC170C0522B /* CrossOverLauncherIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossOverLauncherIndexTests.swift; sourceTree = "<group>"; };
 		A00000000000000000009320 /* ShelfChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfChip.swift; sourceTree = "<group>"; };
 		A00000000000000000009AA0 /* ShelfTrayArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfTrayArt.swift; sourceTree = "<group>"; };
 		A00000000000000000009330 /* ShelfGridPopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfGridPopupView.swift; sourceTree = "<group>"; };
@@ -1259,6 +1264,7 @@
 				A00000000000000000009600 /* TabFoldDecision.swift */,
 				A00000000000000000009E00 /* WindowInventoryAnomalyLog.swift */,
 				A00000000000000000009E03 /* ProcessLiveness.swift */,
+				6054FBBEAC3E8BAFDAE8866C /* CrossOverLauncherIndex.swift */,
 				A00000000000000000009E05 /* ScanAdmissionDecision.swift */,
 				B10000000000000000000103 /* PeriodicReconcileSkipDecision.swift */,
 				E5000000000000000000000A /* WindowSubscriptionLedger.swift */,
@@ -1451,6 +1457,7 @@
 				A00000000000000000009560 /* KeptAppPositionTests.swift */,
 				A00000000000000000009570 /* DrawerOrderStoreTests.swift */,
 				A00000000000000000009770 /* MessagingWindowOrderingTests.swift */,
+				5EA434B125260AC170C0522B /* CrossOverLauncherIndexTests.swift */,
 				A00000000000000000009540 /* AppMembershipProjectionTests.swift */,
 				A00000000000000000009550 /* AppMembershipControllerTests.swift */,
 				A00000000000000000009601 /* TabFoldDecisionTests.swift */,
@@ -1880,6 +1887,7 @@
 				A00000000000000000009610 /* TabFoldDecision.swift in Sources */,
 				A00000000000000000009E10 /* WindowInventoryAnomalyLog.swift in Sources */,
 				A00000000000000000009E16 /* ProcessLiveness.swift in Sources */,
+				766A685DC99E562485499976 /* CrossOverLauncherIndex.swift in Sources */,
 				A00000000000000000009E19 /* ScanAdmissionDecision.swift in Sources */,
 				B10000000000000000000003 /* PeriodicReconcileSkipDecision.swift in Sources */,
 				E50000000000000000000001 /* WindowSubscriptionLedger.swift in Sources */,
@@ -2081,6 +2089,7 @@
 				A00000000000000000009571 /* DrawerOrderStoreTests.swift in Sources */,
 				A00000000000000000007012 /* DrawerOrderStore.swift in Sources */,
 				A00000000000000000009771 /* MessagingWindowOrderingTests.swift in Sources */,
+				B779642DC57DD1DF202083F7 /* CrossOverLauncherIndexTests.swift in Sources */,
 				A00000000000000000009502 /* KeptAppStore.swift in Sources */,
 				A00000000000000000009522 /* AppMembershipController.swift in Sources */,
 				A00000000000000000005012 /* StripOrderStore.swift in Sources */,
@@ -2115,6 +2124,7 @@
 					C90000000000000000000008 /* ChipPressFeedbackTests.swift in Sources */,
 					A00000000000000000009E15 /* AXWindowMatchPolicy.swift in Sources */,
 					A00000000000000000009E17 /* ProcessLiveness.swift in Sources */,
+					8785AD4C3F7E420B93903E80 /* CrossOverLauncherIndex.swift in Sources */,
 					A00000000000000000009E18 /* ProcessLivenessTests.swift in Sources */,
 					A00000000000000000000B91 /* FeedbackTickPolicyTests.swift in Sources */,
 					A00000000000000000009E1A /* ScanAdmissionDecision.swift in Sources */,
