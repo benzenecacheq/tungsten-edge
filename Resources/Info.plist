@@ -42,5 +42,20 @@
        这只是初始值，用户改过的值由 Sparkle 自己存进偏好，我们代码里不写 updateCheckInterval。 -->
   <key>SUScheduledCheckInterval</key>
   <integer>21600</integer>
+  <!-- The marker a folder popup cell's drag carries (FileDragItemProvider.folderReorderType):
+       SwiftUI's onDrop only matches a type that is declared. -->
+  <key>UTExportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key>
+      <string>com.caye.macosdockcc.v2.folder-reorder</string>
+      <key>UTTypeDescription</key>
+      <string>Folder item reorder</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.data</string>
+      </array>
+    </dict>
+  </array>
 </dict>
 </plist>

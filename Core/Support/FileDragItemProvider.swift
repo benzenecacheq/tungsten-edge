@@ -12,7 +12,19 @@ import Foundation
 /// pasteboard, so every receiver — the Trash chip, a pinned folder, the shelf, Finder — acts on
 /// the copy and the user's file stays where it was.
 enum FileDragItemProvider {
-    static func make(for url: URL) -> NSItemProvider {
-        NSItemProvider(object: url as NSURL)
+    /// Marks a drag that started on a folder popup cell, so the popup can tell its own items
+    /// being reordered from files dragged in from elsewhere. Visible to this process only, after
+    /// the URL, so no other app ever sees it.
+    static let folderReorderType = "com.caye.macosdockcc.v2.folder-reorder"
+
+    static func make(for url: URL, marksFolderReorder: Bool = false) -> NSItemProvider {
+        let provider = NSItemProvider(object: url as NSURL)
+        if marksFolderReorder {
+            provider.registerDataRepresentation(forTypeIdentifier: folderReorderType, visibility: .ownProcess) { done in
+                done(Data(url.path.utf8), nil)
+                return nil
+            }
+        }
+        return provider
     }
 }

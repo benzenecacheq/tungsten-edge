@@ -92,4 +92,29 @@ final class FolderSortTests: XCTestCase {
         XCTAssertEqual(cover(.dateAdded), ["newest-dir", "zzz.png", "mmm.png"])
         XCTAssertEqual(cover(.name), ["aaa.png", "mmm.png", "newest-dir"])
     }
+
+    func testManualSortKeepsTheDraggedOrderWithNewItemsFirst() {
+        let entries = [
+            entry("a", added: 100), entry("b", added: 200), entry("c", added: 300),
+            entry("new-old", added: 400), entry("new-new", added: 500),
+        ]
+        let sorted = FolderContentsLoader.sortedManually(entries, order: ["c", "gone", "a", "b"])
+        XCTAssertEqual(sorted.map(\.name), ["new-new", "new-old", "c", "a", "b"])
+    }
+
+    func testManualSortWithNoOrderYetIsDateAdded() {
+        let entries = [entry("old", added: 100), entry("new", added: 300)]
+        XCTAssertEqual(FolderContentsLoader.sortedManually(entries, order: []),
+                       FolderContentsLoader.sortedByDateAdded(entries))
+    }
+
+    func testManualOrderStorePersistsPerFolder() {
+        let suite = "FolderManualOrderStoreTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        FolderManualOrderStore(defaults: defaults).setOrder(["b", "a"], forFolder: "/tmp/x/")
+        let reloaded = FolderManualOrderStore(defaults: defaults)
+        XCTAssertEqual(reloaded.order(forFolder: "/tmp/x"), ["b", "a"])
+        XCTAssertEqual(reloaded.order(forFolder: "/tmp/y"), [])
+    }
 }

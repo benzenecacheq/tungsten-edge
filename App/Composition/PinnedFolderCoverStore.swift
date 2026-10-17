@@ -98,6 +98,12 @@ final class PinnedFolderCoverStore: ObservableObject {
         }
     }
 
+    /// Re-reads one pinned folder's cover (its Manual order changed). Not pinned or not read yet = nothing.
+    func refreshCover(path: String) {
+        guard watchers[path] != nil else { return }
+        refresh(path: path)
+    }
+
     private func publishCover(path: String, stack: [FolderContentsLoader.Entry], generation: Int) {
         guard !stack.isEmpty else {
             covers[path] = FolderCover(layers: [.init(image: Self.icon(forPath: path), isThumbnail: false)])

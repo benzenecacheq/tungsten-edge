@@ -34,6 +34,20 @@ final class FolderPopupModel: ObservableObject {
         watcher = nil
     }
 
+    /// Manual sort: puts `moved` where `target` is and remembers the new order for `folder`.
+    /// Returns whether anything moved.
+    @discardableResult
+    func move(_ moved: URL, to target: URL, inFolder folder: URL) -> Bool {
+        guard moved != target,
+              let from = entries.firstIndex(where: { $0.url == moved }),
+              let to = entries.firstIndex(where: { $0.url == target }) else { return false }
+        var next = entries
+        next.insert(next.remove(at: from), at: to)
+        entries = next
+        FolderManualOrderStore.shared.setOrder(next.map(\.url.lastPathComponent), forFolder: folder.path)
+        return true
+    }
+
     /// 目录读取走自己的串行队列而不是 `Task.detached`：点开弹窗是用户动作，扔进 Swift 协作线程池
     /// 会排在 `AppTracker` 后台 AX 批读（N×100ms 串行）后面（`AGENTS.md` 铁律）。
     private static let reloadQueue = DispatchQueue(label: "com.caye.macosdockcc.v2.folder-popup-reload",
@@ -179,8 +193,12 @@ struct FolderGridPopupView: View {
     /// 「Pin」 on a directory cell's menu. nil = not offered.
     var onPinFolder: ((URL) -> Void)?
     var isFolderPinned: ((URL) -> Bool)?
+    /// A drag reordered the items of this folder (the root or a drilled-in one): its cover may change.
+    var onManualOrderChanged: (URL) -> Void = { _ in }
 
     @StateObject private var model: FolderPopupModel
+    /// The cell being dragged, while the folder is sorted Manually.
+    @State private var reorderingURL: URL?
     /// Empty = the root folder.
     @State private var drillStack: [URL] = []
     /// Off until the first content is in: the first population appears whole, never cell by cell.
@@ -194,7 +212,8 @@ struct FolderGridPopupView: View {
          onFileOpened: @escaping () -> Void = {},
          onContentResize: @escaping (CGSize) -> Void = { _ in },
          onPinFolder: ((URL) -> Void)? = nil,
-         isFolderPinned: ((URL) -> Bool)? = nil) {
+         isFolderPinned: ((URL) -> Bool)? = nil,
+         onManualOrderChanged: @escaping (URL) -> Void = { _ in }) {
         self.rootURL = rootURL
         self.context = context
         self.usesLiquidGlass = usesLiquidGlass
@@ -202,6 +221,7 @@ struct FolderGridPopupView: View {
         self.onContentResize = onContentResize
         self.onPinFolder = onPinFolder
         self.isFolderPinned = isFolderPinned
+        self.onManualOrderChanged = onManualOrderChanged
         _model = StateObject(wrappedValue: {
             let model = FolderPopupModel()
             model.sortOrder = sortOrder
@@ -232,12 +252,22 @@ struct FolderGridPopupView: View {
                          gridAnimation: animatesGridChanges ? .easeInOut(duration: DrawerAnimation.duration) : nil,
                          gridAnimationKey: model.entries.map(\.url.path)) {
             ForEach(model.entries, id: \.url) { entry in
-                FolderGridCell(iconPath: entry.url.path,
-                               staticIcon: nil,
-                               label: entry.name,
-                               preview: entry.isDirectory ? nil : .init(stamp: entry.dateModified),
-                               dragURL: entry.url,
-                               contextMenu: { cellMenu(for: entry) }) { open(entry) }
+                let cell = FolderGridCell(iconPath: entry.url.path,
+                                          staticIcon: nil,
+                                          label: entry.name,
+                                          preview: entry.isDirectory ? nil : .init(stamp: entry.dateModified),
+                                          dragURL: entry.url,
+                                          marksFolderReorder: isManual,
+                                          onDragStarted: isManual ? { reorderingURL = entry.url } : nil,
+                                          contextMenu: { cellMenu(for: entry) }) { open(entry) }
+                if isManual {
+                    cell.onDrop(of: [FileDragItemProvider.folderReorderType],
+                                delegate: ManualReorderDropDelegate(target: entry.url,
+                                                                    dragged: $reorderingURL,
+                                                                    move: { moveDragged($0, to: entry.url) }))
+                } else {
+                    cell
+                }
             }
             FolderGridCell.openInFinder {
                 NSWorkspace.shared.open(currentURL)
@@ -257,6 +287,13 @@ struct FolderGridPopupView: View {
             DispatchQueue.main.async { animatesGridChanges = true }
         }
         .onChange(of: drillStack) { _ in model.display(url: currentURL) }
+    }
+
+    private var isManual: Bool { model.sortOrder == .manual }
+
+    private func moveDragged(_ moved: URL, to target: URL) {
+        let folder = currentURL
+        if model.move(moved, to: target, inFolder: folder) { onManualOrderChanged(folder) }
     }
 
     private func open(_ entry: FolderContentsLoader.Entry) {
@@ -280,6 +317,31 @@ struct FolderGridPopupView: View {
     }
 }
 
+/// Live reordering in a Manually sorted folder: the dragged cell takes each cell's place as the
+/// pointer enters it. Only drags that started on this popup's cells (the reorder marker) count;
+/// a file dragged in from elsewhere is not taken.
+private struct ManualReorderDropDelegate: DropDelegate {
+    let target: URL
+    @Binding var dragged: URL?
+    let move: (URL) -> Void
+
+    func validateDrop(info: DropInfo) -> Bool {
+        dragged != nil && info.hasItemsConforming(to: [FileDragItemProvider.folderReorderType])
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let dragged, dragged != target else { return }
+        move(dragged)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragged = nil
+        return true
+    }
+}
+
 /// One cell of the stack grid, to the native measurements in `StackPopupMetrics`: a 100pt icon
 /// and one line of name. No hover highlight — the native grid has none. Shared by the folder,
 /// shelf and Trash popups.
@@ -299,6 +361,9 @@ struct FolderGridCell: View {
     let label: String
     let preview: Preview?
     var dragURL: URL? = nil
+    /// The drag also carries the folder popup's reorder marker (`FileDragItemProvider`).
+    var marksFolderReorder = false
+    var onDragStarted: (() -> Void)? = nil
     var contextMenu: (() -> NSMenu)? = nil
     let onTap: () -> Void
 
@@ -316,6 +381,8 @@ struct FolderGridCell: View {
          label: String,
          preview: Preview? = nil,
          dragURL: URL? = nil,
+         marksFolderReorder: Bool = false,
+         onDragStarted: (() -> Void)? = nil,
          contextMenu: (() -> NSMenu)? = nil,
          onTap: @escaping () -> Void) {
         self.iconPath = iconPath
@@ -324,6 +391,8 @@ struct FolderGridCell: View {
         self.label = label
         self.preview = preview
         self.dragURL = dragURL
+        self.marksFolderReorder = marksFolderReorder
+        self.onDragStarted = onDragStarted
         self.contextMenu = contextMenu
         self.onTap = onTap
         // Read both caches synchronously: the coordinator warmed the type icons before showing
@@ -346,7 +415,10 @@ struct FolderGridCell: View {
 
     var body: some View {
         if let dragURL {
-            core.onDrag { FileDragItemProvider.make(for: dragURL) }
+            core.onDrag {
+                onDragStarted?()
+                return FileDragItemProvider.make(for: dragURL, marksFolderReorder: marksFolderReorder)
+            }
         } else {
             core
         }

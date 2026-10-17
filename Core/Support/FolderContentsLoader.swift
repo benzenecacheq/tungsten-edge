@@ -8,6 +8,9 @@ enum FolderSortOrder: String, CaseIterable {
     case dateAdded      // 默认：添加日期,最新在前（与旧版唯一排序口径一致）
     case dateModified   // 修改日期,最新在前
     case kind
+    /// The order the user dragged the items into (`FolderManualOrderStore`); items not placed yet
+    /// lead, newest added first.
+    case manual
 
     static let `default`: FolderSortOrder = .dateAdded
 
@@ -17,6 +20,7 @@ enum FolderSortOrder: String, CaseIterable {
         case .dateAdded: return String(localized: "Date Added")
         case .dateModified: return String(localized: "Date Modified")
         case .kind: return String(localized: "Kind")
+        case .manual: return String(localized: "Manual")
         }
     }
 }
@@ -85,6 +89,9 @@ enum FolderContentsLoader {
     /// 按用户选的排序方式排（弹窗网格与封面共用口径）。全部稳定：末级都按本地化文件名破平。
     static func sorted(_ entries: [Entry], by order: FolderSortOrder) -> [Entry] {
         switch order {
+        case .manual:
+            guard let folder = entries.first?.url.deletingLastPathComponent().path else { return entries }
+            return sortedManually(entries, order: FolderManualOrderStore.shared.order(forFolder: folder))
         case .dateAdded:
             return sortedByDateAdded(entries)
         case .name:
@@ -107,6 +114,18 @@ enum FolderContentsLoader {
                 return a.name.localizedStandardCompare(b.name) == .orderedAscending
             }
         }
+    }
+
+    /// `order` is file names, front first. Names not in it (added since the last drag) lead, newest
+    /// added first; names in it that are gone are skipped.
+    static func sortedManually(_ entries: [Entry], order: [String]) -> [Entry] {
+        var rank: [String: Int] = [:]
+        for (index, name) in order.enumerated() where rank[name] == nil { rank[name] = index }
+        let unplaced = sortedByDateAdded(entries.filter { rank[$0.url.lastPathComponent] == nil })
+        let placed = entries.compactMap { entry in rank[entry.url.lastPathComponent].map { (entry, $0) } }
+            .sorted { $0.1 < $1.1 }
+            .map(\.0)
+        return unplaced + placed
     }
 
     /// 种类排序的组别：文件夹(0) → 有扩展名的文件(1) → 无扩展名文件(2,殿后)。

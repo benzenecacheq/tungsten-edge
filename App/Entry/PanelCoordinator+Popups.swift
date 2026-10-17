@@ -101,7 +101,10 @@ extension PanelCoordinator {
                 onFileOpened: { [weak self] in self?.closeFolderPopup() },
                 onContentResize: { [weak self] size in self?.repositionFolderPopup(animated: true, contentSize: size) },
                 onPinFolder: { [weak self] url in self?.pinnedFolderStore.add(url.path) },
-                isFolderPinned: { [weak self] url in self?.pinnedFolderStore.contains(url.path) ?? true }
+                isFolderPinned: { [weak self] url in self?.pinnedFolderStore.contains(url.path) ?? true },
+                onManualOrderChanged: { [weak self] url in
+                    self?.folderCoverStore.refreshCover(path: PinnedFolderStore.normalized(url.path))
+                }
             ))
         }
     }
