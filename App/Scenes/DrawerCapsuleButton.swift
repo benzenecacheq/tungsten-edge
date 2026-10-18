@@ -20,6 +20,9 @@ struct DrawerCapsuleStack: View {
     /// What the pointer is over on a capsule: the tooltip text (an app's name, or the drawer's
     /// name off the apps), or nil once it has left.
     var onHoverChanged: (String, String?) -> Void = { _, _ in }
+    /// The folder capsule sits above the first drawer capsule (a side edge with pinned folders):
+    /// the first capsule then takes half the gap on top instead of the shadow padding.
+    var followsFolderCapsule = false
 
     /// The capsule being dragged to a new place, and how far along the stack it has moved.
     @State private var draggedID: String?
@@ -111,7 +114,7 @@ struct DrawerCapsuleStack: View {
     private func padding(index: Int, count: Int, vertical: Bool) -> EdgeInsets {
         let outer = PanelCoordinator.shadowPadding
         let inner = settingsStore.panelLayoutMetrics.capsuleGap / 2
-        let leading = index == 0 ? outer : inner
+        let leading = index == 0 && !(vertical && followsFolderCapsule) ? outer : inner
         let trailing = index == count - 1 ? outer : inner
         return vertical
             ? EdgeInsets(top: leading, leading: outer, bottom: trailing, trailing: outer)

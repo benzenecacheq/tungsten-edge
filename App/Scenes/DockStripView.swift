@@ -40,6 +40,7 @@ struct DockStripView: View {
     private var metrics: PanelLayoutMetrics {
         var metrics = settingsStore.panelLayoutMetrics
         metrics.capsuleCount = drawerStore.drawers.count
+        if taskbarEdge.isVertical { metrics.folderCapsuleRows = pinnedFolderStore.folderPaths.count }
         return metrics
     }
     var dockScale: CGFloat { settingsStore.dockPanelHeight.scale }

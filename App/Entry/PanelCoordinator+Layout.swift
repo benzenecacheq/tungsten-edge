@@ -32,9 +32,10 @@ extension PanelCoordinator {
 
     func subscribeDrawerStoreWidth() {
         // A new, deleted or moved drawer changes the capsules: the bar's room, and the capsule an
-        // open drawer hangs from.
+        // open drawer hangs from. So does pinning or unpinning a folder (the folder capsule).
         drawerStoreWidthSubscription = drawerStore.$bundleIDs.map { _ in () }
             .merge(with: drawerStore.$drawers.map { $0.map(\.id) }.removeDuplicates().map { _ in () })
+            .merge(with: pinnedFolderStore.$folderPaths.map(\.count).removeDuplicates().map { _ in () })
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 DispatchQueue.main.async { [weak self] in

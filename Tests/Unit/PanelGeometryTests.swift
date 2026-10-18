@@ -630,6 +630,25 @@ final class PanelGeometryTests: XCTestCase {
         XCTAssertEqual((slots[2].minY + bar.maxY) / 2, rangeMid, "bar and all capsules centred as one group")
     }
 
+    func testFolderCapsuleSitsBetweenAColumnAndItsDrawers() {
+        var m = metrics
+        m.capsuleCount = 2
+        m.folderCapsuleRows = 3
+        let dock = PanelGeometry.dockTargetFrame(contentLength: 400, on: rightEdgeScreen, metrics: m, edge: .right)
+        let group = PanelGeometry.capsuleTargetFrame(forDock: dock, on: rightEdgeScreen, metrics: m, edge: .right)
+        let bar = dock.insetBy(dx: m.shadowPadding, dy: m.shadowPadding)
+        let cap = group.insetBy(dx: m.shadowPadding, dy: m.shadowPadding)
+        let folders = 3 * m.capsuleWidth
+        XCTAssertEqual(cap.maxY, bar.minY - m.capsuleGap, "the folder capsule comes first under the bar")
+        let first = PanelGeometry.capsuleSlotFrame(index: 0, inGroup: group, metrics: m, edge: .right)
+            .insetBy(dx: m.shadowPadding, dy: m.shadowPadding)
+        let second = PanelGeometry.capsuleSlotFrame(index: 1, inGroup: group, metrics: m, edge: .right)
+            .insetBy(dx: m.shadowPadding, dy: m.shadowPadding)
+        XCTAssertEqual(first.maxY, cap.maxY - folders - m.capsuleGap, "the drawers follow the folder capsule")
+        XCTAssertEqual(second.maxY, first.minY - m.capsuleGap)
+        XCTAssertEqual(second.minY, cap.minY, "the group ends at the last drawer capsule")
+    }
+
     func testNamedDrawerCapsulesRunRightOfABottomBar() {
         var m = metrics
         m.capsuleCount = 2

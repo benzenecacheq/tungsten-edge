@@ -248,6 +248,7 @@
 		A00000000000000000009371 /* FolderChipDropZoneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009370 /* FolderChipDropZoneTests.swift */; };
 		A00000000000000000009241 /* FolderGridPopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009240 /* FolderGridPopupView.swift */; };
 		A00000000000000000009251 /* PinnedFolderChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009250 /* PinnedFolderChip.swift */; };
+		7D35E12965C5129C90526CB3 /* FolderCapsule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 109B83E2C49B216768FEF5E7 /* FolderCapsule.swift */; };
 		A00000000000000000009281 /* FolderContentsLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009280 /* FolderContentsLoaderTests.swift */; };
 		A00000000000000000009041 /* NativeDockPreferencesService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009020 /* NativeDockPreferencesService.swift */; };
 		A00000000000000000009051 /* PanelVisibilityState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000009030 /* PanelVisibilityState.swift */; };
@@ -894,6 +895,7 @@
 		A00000000000000000009370 /* FolderChipDropZoneTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderChipDropZoneTests.swift; sourceTree = "<group>"; };
 		A00000000000000000009240 /* FolderGridPopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderGridPopupView.swift; sourceTree = "<group>"; };
 		A00000000000000000009250 /* PinnedFolderChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedFolderChip.swift; sourceTree = "<group>"; };
+		109B83E2C49B216768FEF5E7 /* FolderCapsule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderCapsule.swift; sourceTree = "<group>"; };
 		A00000000000000000009280 /* FolderContentsLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderContentsLoaderTests.swift; sourceTree = "<group>"; };
 		A000000000000000000090B0 /* FullscreenClassificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenClassificationTests.swift; sourceTree = "<group>"; };
 		B74000000000000000000003 /* SubscriptionSubmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionSubmitter.swift; sourceTree = "<group>"; };
@@ -1078,6 +1080,7 @@
 				A000000000000000000019C1 /* AppMenuFragments.swift */,
 				A00000000000000000009240 /* FolderGridPopupView.swift */,
 				A00000000000000000009250 /* PinnedFolderChip.swift */,
+				109B83E2C49B216768FEF5E7 /* FolderCapsule.swift */,
 				A00000000000000000009320 /* ShelfChip.swift */,
 				A00000000000000000009AA0 /* ShelfTrayArt.swift */,
 				A00000000000000000009330 /* ShelfGridPopupView.swift */,
@@ -1856,6 +1859,7 @@
 					A0000000000000000000BD41 /* StackPopupSnapshotProbe.swift in Sources */,
 					A00000000000000000009241 /* FolderGridPopupView.swift in Sources */,
 					A00000000000000000009251 /* PinnedFolderChip.swift in Sources */,
+					7D35E12965C5129C90526CB3 /* FolderCapsule.swift in Sources */,
 					A000000000000000000019A2 /* BadgeStore.swift in Sources */,
 					A000000000000000000019A3 /* DockBadgeReader.swift in Sources */,
 					A00000000000000000001005 /* IntentPipeline.swift in Sources */,

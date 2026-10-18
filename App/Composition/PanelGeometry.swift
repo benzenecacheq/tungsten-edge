@@ -93,11 +93,20 @@ struct PanelLayoutMetrics: Equatable {
     var columnGrowth: ColumnGrowth = .both
     /// How many drawer capsules follow the bar (one per named drawer), `capsuleGap` apart.
     var capsuleCount: Int = 1
+    /// Pinned folders shown in the folder capsule above the drawer capsules (a side edge only;
+    /// 0 = no folder capsule, the folders stay on the bar).
+    var folderCapsuleRows: Int = 0
 
-    /// The capsules' extent along the bar: every capsule plus the gaps between them.
+    /// The folder capsule's extent plus the gap after it; 0 without one.
+    var folderCapsuleExtent: CGFloat {
+        folderCapsuleRows > 0 ? CGFloat(folderCapsuleRows) * capsuleWidth + capsuleGap : 0
+    }
+
+    /// The capsules' extent along the bar: the folder capsule, every drawer capsule, and the gaps
+    /// between them.
     var capsuleRun: CGFloat {
         let count = CGFloat(max(capsuleCount, 1))
-        return count * capsuleWidth + (count - 1) * capsuleGap
+        return folderCapsuleExtent + count * capsuleWidth + (count - 1) * capsuleGap
     }
 
     /// Fixed; never scales with the bar height (see `DockPanelHeight.metrics`).
@@ -492,7 +501,8 @@ enum PanelGeometry {
 
     /// One capsule's frame inside the capsule panel's `group` frame, padded by `shadowPadding` as
     /// if it were a panel of its own (what the drawer, the arrow and the drop zones anchor on).
-    /// Capsule 0 sits next to the bar: the top one below a column, the left one beside a bar.
+    /// Capsule 0 sits next to the bar: the top one below a column (after the folder capsule,
+    /// when there is one), the left one beside a bar.
     static func capsuleSlotFrame(
         index: Int,
         inGroup group: CGRect,
@@ -502,7 +512,8 @@ enum PanelGeometry {
         let side = metrics.capsuleWidth + metrics.shadowPadding * 2
         let step = CGFloat(index) * (metrics.capsuleWidth + metrics.capsuleGap)
         return edge.isVertical
-            ? CGRect(x: group.minX, y: group.maxY - side - step, width: group.width, height: side)
+            ? CGRect(x: group.minX, y: group.maxY - side - step - metrics.folderCapsuleExtent,
+                     width: group.width, height: side)
             : CGRect(x: group.minX + step, y: group.minY, width: side, height: side)
     }
 

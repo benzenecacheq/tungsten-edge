@@ -30,6 +30,7 @@ final class PanelCoordinator: NSObject {
     var layoutMetrics: PanelLayoutMetrics {
         var metrics = settingsStore.panelLayoutMetrics
         metrics.capsuleCount = drawerStore.drawers.count
+        if settingsStore.taskbarEdge.isVertical { metrics.folderCapsuleRows = pinnedFolderStore.folderPaths.count }
         return metrics
     }
     /// The screen edge the bar hugs (settings → `TaskbarEdge`).

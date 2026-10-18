@@ -183,18 +183,36 @@ extension PanelCoordinator {
             usesLiquidGlass: usesLiquidGlass
         )
         configurePanel(panel, backgroundColor: NSColor(white: 1.0, alpha: 0.0), appliesLevelOverride: true)
+        let usesLiquidGlass = usesLiquidGlass
         let hosting = NSHostingView(rootView:
-            DrawerCapsuleStack(
-                onRequestMenu: { [weak self] event, view, drawerID in
-                    self?.showDrawerCapsuleMenu(event: event, view: view, drawerID: drawerID)
+            CapsulePanelContent(
+                drawers: { [weak self] followsFolders in
+                    DrawerCapsuleStack(
+                        onRequestMenu: { [weak self] event, view, drawerID in
+                            self?.showDrawerCapsuleMenu(event: event, view: view, drawerID: drawerID)
+                        },
+                        usesLiquidGlass: usesLiquidGlass,
+                        action: { [weak self] drawerID in self?.toggleDrawer(drawerID) },
+                        onPrimaryAction: { [weak self] in self?.closeDrawerAfterAction() },
+                        onHoverChanged: { [weak self] drawerID, title in
+                            self?.drawerCapsuleHoverChanged(drawerID, title: title)
+                        },
+                        followsFolderCapsule: followsFolders
+                    )
                 },
-                usesLiquidGlass: usesLiquidGlass,
-                action: { [weak self] drawerID in self?.toggleDrawer(drawerID) },
-                onPrimaryAction: { [weak self] in self?.closeDrawerAfterAction() },
-                onHoverChanged: { [weak self] drawerID, title in
-                    self?.drawerCapsuleHoverChanged(drawerID, title: title)
+                folders: { [weak self] padding in
+                    FolderCapsule(
+                        usesLiquidGlass: usesLiquidGlass,
+                        edgePadding: padding,
+                        onOpen: { [weak self] path in self?.toggleFolderCapsulePopup(path: path) },
+                        onOpenInFinder: { path in NSWorkspace.shared.open(URL(fileURLWithPath: path)) },
+                        onAddFolder: { [weak self] in self?.onAddFolder() },
+                        onMoveFiles: { [weak self] urls, path in self?.moveExternalFiles(urls, into: path) }
+                    )
                 }
             )
+                .environmentObject(pinnedFolderStore)
+                .environmentObject(folderCoverStore)
                 .environmentObject(runtime)
                 .environmentObject(drawerStore)
                 .environmentObject(messagingStore)
@@ -209,6 +227,21 @@ extension PanelCoordinator {
         hosting.layer?.backgroundColor = NSColor(white: 1.0, alpha: 0.0).cgColor
         capsuleContentHost = ManualPanelHost(contentView: hosting, in: panel)
         capsulePanel = panel
+    }
+
+    /// A folder capsule row was clicked: its popup hangs from the row's cover, worked out from the
+    /// capsule panel's target frame the way `capsuleSlotFrame` places the drawer capsules.
+    func toggleFolderCapsulePopup(path: String) {
+        guard let index = pinnedFolderStore.folderPaths.firstIndex(of: path), lastCapsuleTargetFrame != .zero
+        else { return }
+        let metrics = layoutMetrics
+        let scale = settingsStore.dockPanelHeight.scale
+        let top = lastCapsuleTargetFrame.maxY - Self.shadowPadding
+        let anchor = NSRect(x: lastCapsuleTargetFrame.minX + Self.shadowPadding + PanelLayoutMetrics.columnInset * scale,
+                            y: top - CGFloat(index + 1) * metrics.capsuleWidth,
+                            width: ChipPillMetrics.cardWidth * scale,
+                            height: metrics.capsuleWidth)
+        toggleFolderPopup(path: path, anchorVisibleRect: anchor)
     }
 
     /// 两个常驻面板先在隐藏态完成 SwiftUI 布局和目标 frame 提交，再一起显示。

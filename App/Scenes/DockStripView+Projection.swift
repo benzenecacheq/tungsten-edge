@@ -253,7 +253,9 @@ extension DockStripView {
         }()
         // The folder-zone gap (a folder dragged in from Finder) goes in after the store order for
         // the same reason: it is a render artifact, never a pinned path. Clamped like the live one.
-        var pinnedEntries = pinnedFolderStore.folderPaths.map { StripEntry.pinnedFolder(path: $0) }
+        // On a side edge the folders live in their own capsule under the bar (`FolderCapsule`).
+        var pinnedEntries = taskbarEdge.isVertical
+            ? [] : pinnedFolderStore.folderPaths.map { StripEntry.pinnedFolder(path: $0) }
         if let ghost = externalDropGhost, ghost.zone == .folder {
             pinnedEntries.insert(.externalDropGhost(key: "folder"),
                                  at: min(max(ghost.insertIndex, 0), pinnedEntries.count))

@@ -126,6 +126,17 @@ struct PinnedFolderChip: View {
     }
 
     private func buildMenu() -> NSMenu {
+        Self.menu(sortOrder: sortOrder, onPreview: onPreview, onOpenInFinder: onOpenInFinder,
+                  onSetSortOrder: onSetSortOrder, onAddFolder: onAddFolder, onRemove: onRemove)
+    }
+
+    /// The folder's right-click menu; the folder capsule's rows show it too.
+    static func menu(sortOrder: FolderSortOrder,
+                     onPreview: @escaping () -> Void,
+                     onOpenInFinder: @escaping () -> Void,
+                     onSetSortOrder: @escaping (FolderSortOrder) -> Void,
+                     onAddFolder: @escaping () -> Void,
+                     onRemove: @escaping () -> Void) -> NSMenu {
         let menu = NSMenu()
         menu.addItem(ClosureMenuItem(String(localized: "Preview Contents")) { onPreview() })
         menu.addItem(ClosureMenuItem(String(localized: "Open in Finder")) { onOpenInFinder() })
