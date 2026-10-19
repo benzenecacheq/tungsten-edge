@@ -363,6 +363,12 @@ struct LauncherChip: View {
                 for app in runningApps { _ = app.hide() }
             } else {
                 // 未激活 / 隐藏 / 窗口已关 → 唤出：关闭抽屉
+                let adopted = runningApps.filter(CrossOverLauncherIndex.isAdopted)
+                if !adopted.isEmpty, adopted.count == runningApps.count {
+                    adopted.forEach(CrossOverLauncherIndex.bringForward)
+                    onOpen?()
+                    return
+                }
                 guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
                 for app in runningApps { _ = app.unhide() }
                 NSWorkspace.shared.openApplication(at: appURL, configuration: .init(), completionHandler: nil)

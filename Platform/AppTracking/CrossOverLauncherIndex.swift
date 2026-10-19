@@ -30,6 +30,31 @@ enum CrossOverLauncherIndex {
         return owned + adopted
     }
 
+    /// A bundle-less CrossOver program standing in for its launcher.
+    static func isAdopted(_ app: NSRunningApplication) -> Bool {
+        (app.bundleIdentifier ?? "").isEmpty
+    }
+
+    /// Brings an adopted program forward the way the Dock does: activate it, then send it
+    /// Reopen, which Wine answers by restoring its minimized windows. Opening the launcher
+    /// instead never reaches a copy started some other way, so its windows stay in the Dock.
+    static func bringForward(_ app: NSRunningApplication) {
+        _ = app.unhide()
+        app.activate(options: [.activateIgnoringOtherApps])
+        let pid = app.processIdentifier
+        AppRuntime.actionQueue.async {
+            let event = NSAppleEventDescriptor(
+                eventClass: AEEventClass(kCoreEventClass),
+                eventID: AEEventID(kAEReopenApplication),
+                targetDescriptor: NSAppleEventDescriptor(processIdentifier: pid),
+                returnID: AEReturnID(kAutoGenerateReturnID),
+                transactionID: AETransactionID(kAnyTransactionID)
+            )
+            // 0x00020000: kAEDoNotPromptForUserConsent.
+            _ = try? event.sendEvent(options: [.noReply, .neverInteract, .init(rawValue: 0x00020000)], timeout: 3)
+        }
+    }
+
     static func launcherBundleID(processName: String?, executablePath: String?) -> String? {
         guard let key = programKey(processName: processName, executablePath: executablePath) else { return nil }
         return cache.lookup(key)

@@ -158,6 +158,10 @@ extension DockStripView {
                 $0.activationPolicy == .regular
                     && ProcessLiveness.isAlive(pid: $0.processIdentifier)
             }
+        if !runningApps.isEmpty, runningApps.allSatisfy(CrossOverLauncherIndex.isAdopted) {
+            runningApps.forEach(CrossOverLauncherIndex.bringForward)
+            return
+        }
         for app in runningApps { _ = app.unhide() }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
         NSWorkspace.shared.openApplication(at: url, configuration: .init(), completionHandler: nil)
