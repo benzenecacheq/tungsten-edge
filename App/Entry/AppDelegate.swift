@@ -505,7 +505,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startTaskbarRuntime() {
-        appMembershipController.reconcileInvalidMemberships()
         runningApplicationStore.start()
         runtime.start()
 

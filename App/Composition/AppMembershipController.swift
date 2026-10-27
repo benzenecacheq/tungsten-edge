@@ -3,9 +3,8 @@ import Foundation
 /// Single mutation boundary for app membership conversions.
 ///
 /// Drawer membership is placement; kept membership means an entry survives app
-/// exit. Kept, drawer, and messaging identity may all coexist. Finder joins kept
-/// and drawer like any other app (owner 2026-08-20) but is still barred from the
-/// messaging zone — see `FinderTaskbarPolicy`.
+/// exit. Kept, drawer, and messaging identity may all coexist. Finder joins all
+/// three like any other app — see `FinderTaskbarPolicy`.
 @MainActor
 final class AppMembershipController: ObservableObject {
     private let keptAppStore: KeptAppStore
@@ -90,17 +89,6 @@ final class AppMembershipController: ObservableObject {
         messagingStore.unmark(bundleID)
     }
 
-    /// Startup repair. The only illegal membership left is Finder in the messaging
-    /// zone — since 2026-08-20 Finder may be kept and may sit in the drawer, and this
-    /// runs on every launch, so clearing drawer placement here would wipe the user's
-    /// own stash. Kept and messaging deliberately coexist, so there is no
-    /// kept/messaging reconciliation.
-    func reconcileInvalidMemberships() {
-        let finder = FinderTaskbarPolicy.bundleID
-        if messagingStore.contains(finder) {
-            messagingStore.unmark(finder)
-        }
-    }
 }
 
 /// Defensive, side-effect-free projections used by the strip, drawer, and capsule.

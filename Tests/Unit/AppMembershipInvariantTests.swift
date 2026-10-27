@@ -2,7 +2,6 @@ import XCTest
 @testable import macos_dock_cc_v2
 
 /// 三个成员仓库（kept / drawer / messaging）跑遍公开变更后的不变量锁：
-/// - 访达永不在消息区；
 /// - 消息身份与 opt-out 不同时成立；
 /// - 三张表无空白、无重复；
 /// - UserDefaults 域里只出现现行键 + 冻结旧键，且冻结旧键字节不变（代码回滚仍能读同样的数据）。
@@ -46,8 +45,6 @@ final class AppMembershipInvariantTests: XCTestCase {
     }
 
     private func assertInvariants(_ step: String, file: StaticString = #filePath, line: UInt = #line) {
-        let finder = FinderTaskbarPolicy.bundleID
-        XCTAssertFalse(messaging.contains(finder), "[\(step)] 访达进了消息区", file: file, line: line)
         let optOut = Set(defaults.stringArray(forKey: "messagingOptOutBundleIDsV2") ?? [])
         XCTAssertTrue(optOut.isDisjoint(with: messaging.bundleIDs), "[\(step)] 消息身份与 opt-out 同时成立", file: file, line: line)
         for (name, list) in [("kept", kept.bundleIDs), ("drawer", drawer.bundleIDs), ("messaging", messaging.bundleIDs)] {
@@ -74,7 +71,7 @@ final class AppMembershipInvariantTests: XCTestCase {
         controller.applyDragLanding(bundleID: "com.example.b", originSource: .strip); assertInvariants("landing in drawer")
         controller.markMessaging("com.example.c"); assertInvariants("markMessaging")
         controller.markMessaging("com.example.c"); assertInvariants("markMessaging twice")
-        controller.markMessaging(FinderTaskbarPolicy.bundleID); assertInvariants("markMessaging finder (rejected)")
+        controller.markMessaging(FinderTaskbarPolicy.bundleID); assertInvariants("markMessaging finder")
         messaging.reorder(draggedID: "com.example.c", relativeTo: "com.example.c", after: true); assertInvariants("reorder self")
         controller.unmarkMessaging("com.example.c"); assertInvariants("unmarkMessaging")
         controller.autoRegisterMessaging(runningBundleIDs: ["com.example.c", "Mattermost.Desktop"],
@@ -83,18 +80,7 @@ final class AppMembershipInvariantTests: XCTestCase {
         XCTAssertFalse(messaging.contains("com.example.c"), "opt-out 之后自动注册不得再加回来")
         controller.setKept("com.example.a", enabled: false); assertInvariants("setKept off")
         drawer.remove("com.example.a"); assertInvariants("drawer remove")
-        controller.reconcileInvalidMemberships(); assertInvariants("reconcile")
         XCTAssertTrue(kept.contains("com.example.b"))
     }
 
-    func testFinderInMessagingIsRepairedOnStartup() {
-        // 模拟坏数据：旧版本写进去的访达消息身份。
-        defaults.set([FinderTaskbarPolicy.bundleID, "com.example.c"], forKey: "messagingBundleIDsV2")
-        let messaging = MessagingAppStore(defaults: defaults)
-        let controller = AppMembershipController(keptAppStore: kept, drawerStore: drawer, messagingStore: messaging)
-        XCTAssertTrue(messaging.contains(FinderTaskbarPolicy.bundleID))
-        controller.reconcileInvalidMemberships()
-        XCTAssertFalse(messaging.contains(FinderTaskbarPolicy.bundleID))
-        XCTAssertTrue(messaging.contains("com.example.c"), "修复只清访达，不动别人")
-    }
 }

@@ -148,7 +148,7 @@ extension DockStripView {
             return
         }
         LauncherChip.performDefaultTap(bundleID: bundleID, isRunning: true,
-                                       finderHasRealWindow: false,   // 访达进不了消息区
+                                       finderHasRealWindow: hasRealWindow,
                                        launch: {}, onOpen: nil)
     }
 

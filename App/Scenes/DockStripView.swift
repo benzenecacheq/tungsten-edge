@@ -1692,7 +1692,7 @@ struct DockStripView: View {
                     LauncherChip(bundleID: bid,
                                  isRunning: running,
                                  isHidden: running && projection.hiddenBundleIDs.contains(bid),
-                                 finderHasRealWindow: false,   // 访达进不了消息区
+                                 finderHasRealWindow: projection.hasRealWindow(bundleID: bid),
 
                                  isLaunching: runtime.launchingBundleIDs.contains(bid),
                                  scale: dockScale,

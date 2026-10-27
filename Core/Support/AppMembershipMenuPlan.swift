@@ -1,6 +1,6 @@
 import Foundation
 
-/// 成员菜单的**纯决策层**：给定图标所在面（strip / drawer）+ Finder / kept / messaging
+/// 成员菜单的**纯决策层**：给定图标所在面（strip / drawer）+ kept / messaging
 /// 状态，产出应出现的成员项（顺序即渲染顺序，不含 closure）。抽成纯逻辑便于单测；把 `Item`
 /// 映射成带动作的菜单项由 `LauncherMembershipItem.items` 完成，四条菜单构造路径统一消费。
 ///
@@ -9,7 +9,7 @@ import Foundation
 /// - strip 消息：在程序坞中保留 + 固定为应用图标（已勾选）
 /// - drawer 普通：仅在程序坞中保留
 /// - drawer 消息：在程序坞中保留 + 固定为应用图标（已勾选）
-/// - Finder：仅在程序坞中保留（2026-08-20 起访达纳入统一保留勾选，但仍不能进消息区）
+/// - Finder：同普通应用（2026-10-20 起可固定为应用图标）
 enum AppMembershipMenuPlan {
     enum Surface: Equatable { case strip, drawer }
 
@@ -20,11 +20,8 @@ enum AppMembershipMenuPlan {
     }
 
     static func items(surface: Surface,
-                      isFinder: Bool,
                       isKept: Bool,
                       isMessaging: Bool) -> [Item] {
-        // 访达只给保留勾选：消息区的图标代表「这个应用的主窗口」，访达没有这种语义。
-        if isFinder { return [.keep(isChecked: isKept)] }
         // 保留勾选恒在前，消息命令在后。
         var items: [Item] = [.keep(isChecked: isKept)]
         if isMessaging {

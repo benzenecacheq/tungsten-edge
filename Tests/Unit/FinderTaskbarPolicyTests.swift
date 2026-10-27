@@ -15,9 +15,9 @@ final class FinderTaskbarPolicyTests: XCTestCase {
         XCTAssertFalse(FinderTaskbarPolicy.showsAppLevelEntry(isKept: false))
     }
 
-    /// 抽屉与保留都放开了，消息区仍然不放开。
-    func testMessagingStaysClosedToFinder() {
-        XCTAssertFalse(FinderTaskbarPolicy.canMarkMessaging(FinderTaskbarPolicy.bundleID))
+    /// Finder can be pinned as an app icon too (2026-10-20); only a blank ID cannot.
+    func testMessagingIsOpenToFinder() {
+        XCTAssertTrue(FinderTaskbarPolicy.canMarkMessaging(FinderTaskbarPolicy.bundleID))
         XCTAssertFalse(FinderTaskbarPolicy.canMarkMessaging(""))
         XCTAssertTrue(FinderTaskbarPolicy.canMarkMessaging("com.example.chat"))
     }

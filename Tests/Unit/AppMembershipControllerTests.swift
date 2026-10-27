@@ -125,11 +125,11 @@ final class AppMembershipControllerTests: XCTestCase {
         XCTAssertFalse(kept.contains("com.example.app"))
     }
 
-    /// 访达可 kept、可进抽屉，但消息区仍然进不去。
-    func testMarkMessagingRejectsFinder() {
+    /// Finder can be pinned as an app icon like any other app (2026-10-20).
+    func testMarkMessagingAcceptsFinder() {
         let finder = FinderTaskbarPolicy.bundleID
         controller.markMessaging(finder)
-        XCTAssertFalse(messaging.contains(finder))
+        XCTAssertTrue(messaging.contains(finder))
     }
 
     // MARK: - autoRegisterMessaging (首次识别补 kept，扫描不重开)
@@ -206,26 +206,6 @@ final class AppMembershipControllerTests: XCTestCase {
         XCTAssertFalse(messaging.contains(bundleID))
         XCTAssertTrue(kept.contains(bundleID), "取消标记不改变 kept")
         XCTAssertTrue(drawer.contains(bundleID), "取消标记不改变 drawer placement")
-    }
-
-    // MARK: - reconcileInvalidMemberships (只清访达的消息身份)
-
-    /// 每次启动都会跑：只能清消息身份。清抽屉会把用户自己拖进去的访达抹掉（2026-08-20）。
-    func testReconcileClearsOnlyFinderMessagingAndKeepsDrawerPlacement() {
-        let finder = FinderTaskbarPolicy.bundleID
-        drawer.add(finder)
-        messaging.mark(finder)
-        controller.reconcileInvalidMemberships()
-        XCTAssertTrue(drawer.contains(finder))
-        XCTAssertFalse(messaging.contains(finder))
-    }
-
-    func testReconcilePreservesKeptMessagingOverlap() {
-        controller.setKept("com.example.app", enabled: true)
-        messaging.mark("com.example.app")
-        controller.reconcileInvalidMemberships()
-        XCTAssertTrue(kept.contains("com.example.app"))
-        XCTAssertTrue(messaging.contains("com.example.app"))
     }
 
     // MARK: - DrawerStore migration

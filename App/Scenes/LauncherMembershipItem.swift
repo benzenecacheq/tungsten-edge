@@ -21,7 +21,6 @@ extension LauncherMembershipItem {
     ) -> [LauncherMembershipItem] {
         AppMembershipMenuPlan.items(
             surface: surface,
-            isFinder: FinderTaskbarPolicy.isFinder(bundleID),
             isKept: isKept,
             isMessaging: isMessaging
         ).map { item in

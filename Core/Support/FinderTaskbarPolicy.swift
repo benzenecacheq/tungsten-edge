@@ -3,8 +3,9 @@ import Foundation
 /// 访达在任务条侧的成员资格与常驻策略（owner 2026-08-20 定，反转「访达永远常驻、不提供保留状态」）。
 ///
 /// 访达现在和普通应用走同一套「在程序坞中保留」：勾上（默认）就永远有一个应用级入口，
-/// 取消勾选后，所有访达窗口关掉时那张入口卡消失，再开窗口时窗口卡回来。抽屉也一并放开，
-/// **消息区仍然不放开**——消息区的图标代表「这个应用的主窗口」，访达没有这种主窗口语义。
+/// 取消勾选后，所有访达窗口关掉时那张入口卡消失，再开窗口时窗口卡回来。抽屉也一并放开。
+/// Since 2026-10-20 Finder can be pinned as an app icon too: like any pinned app, the tile
+/// takes its first window on the bar and the rest follow it.
 ///
 /// 跟踪层（`AppTracker` / `FinderWindowRules`）不受这里影响：访达始终被收编、进程重启也保住条目，
 /// 「消失」只发生在投影层（`DockStripView.makeProjection`），这样一开窗口卡就能瞬时回来。
@@ -25,8 +26,8 @@ enum FinderTaskbarPolicy {
         isKept
     }
 
-    /// 能否固定为应用图标。访达永远不行。
+    /// 能否固定为应用图标。
     static func canMarkMessaging(_ bundleID: String) -> Bool {
-        !bundleID.isEmpty && !isFinder(bundleID)
+        !bundleID.isEmpty
     }
 }
