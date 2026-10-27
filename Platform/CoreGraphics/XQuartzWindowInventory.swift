@@ -69,23 +69,24 @@ enum XQuartzWindowInventory {
     /// - Parameters:
     ///   - cgWindows: XQuartz's layer-0 windows, front to back as the window server lists them.
     ///   - menuTitles: the window titles from XQuartz's Window menu, in menu order.
+    ///   - popupIDs: windows known to be X pop-ups (`XQuartzPopupFinder`), never in the menu.
     ///
-    /// X windows are those with a Space that are not AppKit panels. When their count matches the
-    /// menu's they pair by position. Otherwise, given window-server titles, each title's windows
-    /// pair with that title's menu items in order. Minimized = in a Space that is showing, yet off
-    /// screen; a window on another Space is merely off screen.
-    static func windows(cgWindows: [XQuartzCGWindow], menuTitles: [String]) -> [XQuartzWindow]? {
-        let xWindows = cgWindows
-            .filter { $0.hasSpace && !$0.isAppKitWindow }
-            .sorted { $0.id < $1.id }
+    /// X windows are those with a Space that are not AppKit panels or pop-ups. When their count
+    /// matches the menu's they pair by position. Otherwise, given window-server titles, each
+    /// title's windows pair with that title's menu items in order, and untitled ones (pop-ups) are
+    /// left out. Minimized = in a Space that is showing, yet off screen; a window on another Space
+    /// is merely off screen.
+    static func windows(cgWindows: [XQuartzCGWindow], menuTitles: [String],
+                        popupIDs: Set<CGWindowID> = []) -> [XQuartzWindow]? {
+        let xWindows = xWindows(cgWindows).filter { !popupIDs.contains($0.id) }
 
         var paired: [(window: XQuartzCGWindow, title: String, menuIndex: Int)] = []
         if xWindows.count == menuTitles.count {
             paired = zip(xWindows, menuTitles.indices).map { ($0, menuTitles[$1], $1) }
-        } else if xWindows.allSatisfy({ !$0.title.isEmpty }) {
+        } else if xWindows.contains(where: { !$0.title.isEmpty }) {
             var unclaimed: [String: [Int]] = [:]
             for (index, title) in menuTitles.enumerated() { unclaimed[title, default: []].append(index) }
-            for window in xWindows {
+            for window in xWindows where !window.title.isEmpty {
                 guard var indices = unclaimed[window.title], !indices.isEmpty else { continue }
                 paired.append((window, window.title, indices.removeFirst()))
                 unclaimed[window.title] = indices
@@ -105,6 +106,171 @@ enum XQuartzWindowInventory {
                 isFront: window.id == frontID,
                 menuIndex: menuIndex
             )
+        }
+    }
+}
+
+extension XQuartzWindowInventory {
+    /// The windows that may be X windows: those with a Space that are not AppKit panels, in
+    /// creation (window-ID) order.
+    static func xWindows(_ cgWindows: [XQuartzCGWindow]) -> [XQuartzCGWindow] {
+        cgWindows.filter { $0.hasSpace && !$0.isAppKitWindow }.sorted { $0.id < $1.id }
+    }
+
+    /// The window-server windows that are X pop-ups. Each pop-up's outer size (`xwininfo` gives
+    /// the inside size and the border) claims the window of that size — the nearest across, if
+    /// several — that no other pop-up has claimed. Managed windows never match: their window
+    /// includes quartz-wm's title bar.
+    static func popupIDs(xWindows: [XQuartzCGWindow], popups: [XQuartzPopupFinder.Popup]) -> Set<CGWindowID> {
+        var claimed = Set<CGWindowID>()
+        for popup in popups {
+            let outer = CGSize(width: popup.frame.width + 2 * popup.borderWidth,
+                               height: popup.frame.height + 2 * popup.borderWidth)
+            let match = xWindows
+                .filter { window in
+                    guard !claimed.contains(window.id), let bounds = window.bounds else { return false }
+                    return abs(bounds.width - outer.width) <= 1 && abs(bounds.height - outer.height) <= 1
+                }
+                .min { abs(($0.bounds?.minX ?? 0) - popup.frame.minX) < abs(($1.bounds?.minX ?? 0) - popup.frame.minX) }
+            if let match { claimed.insert(match.id) }
+        }
+        return claimed
+    }
+}
+
+/// X pop-ups — menus, tooltips, xterm's Ctrl-click menus — are override-redirect windows: no
+/// window manager frame, and so no Window menu item. XQuartz still gives each one a window-server
+/// window, kept (off screen) after the pop-up closes, and those leave the window server listing
+/// more X windows than the menu. Without titles to tell them apart, every card of that server
+/// would go unpaired; the X server itself says which are pop-ups.
+enum XQuartzPopupFinder {
+    struct Popup: Equatable {
+        /// X root coordinates, inside the border.
+        let frame: CGRect
+        let borderWidth: CGFloat
+    }
+
+    private static let xwininfo = "/opt/X11/bin/xwininfo"
+
+    /// XQuartz serves :0; `xdesk`'s copy `org.xquartz.X11.displayN` serves :N.
+    static func display(forBundleIdentifier bundleID: String) -> String? {
+        if bundleID == XQuartzWindowRules.bundleIdentifier { return ":0" }
+        guard bundleID.hasPrefix(XQuartzWindowRules.copyBundleIdentifierPrefix),
+              let number = Int(bundleID.dropFirst(XQuartzWindowRules.copyBundleIdentifierPrefix.count)) else { return nil }
+        return ":\(number)"
+    }
+
+    /// Top-level windows from `xwininfo -root -tree` with no name and no children: the pop-up
+    /// candidates. Managed windows carry their title, and quartz-wm's frames (also unnamed and
+    /// override-redirect) hold the window they frame. `(id, frame)`; the frame is the absolute one.
+    static func popupCandidates(fromTree output: String) -> [(id: String, frame: CGRect)] {
+        let lines = output.split(separator: "\n").map { line -> (indent: Int, text: Substring) in
+            let indent = line.prefix { $0 == " " }.count
+            return (indent, line.dropFirst(indent))
+        }
+        let windowIndents = lines.filter { $0.text.hasPrefix("0x") }.map(\.indent)
+        guard let topIndent = windowIndents.min() else { return [] }
+        var candidates: [(id: String, frame: CGRect)] = []
+        for (index, line) in lines.enumerated() where line.indent == topIndent && line.text.hasPrefix("0x") {
+            let next = lines[(index + 1)...].first { !$0.text.isEmpty }
+            if let next, next.indent > topIndent { continue }   // "N children:" — a frame
+            let fields = line.text.split(separator: " ")
+            guard fields.count >= 4, line.text.contains("(has no name)"),
+                  let size = parseSize(fields[fields.count - 2]), let origin = parseOrigin(fields[fields.count - 1])
+            else { continue }
+            candidates.append((String(fields[0]), CGRect(origin: origin, size: size)))
+        }
+        return candidates
+    }
+
+    /// From `xwininfo -id`: nil unless the window is override-redirect, else its border width.
+    static func overrideRedirectBorder(fromWindowInfo output: String) -> CGFloat? {
+        var isOverride = false
+        var border: CGFloat = 0
+        for line in output.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed == "Override Redirect State: yes" { isOverride = true }
+            if trimmed.hasPrefix("Border width:"), let value = Double(trimmed.dropFirst("Border width:".count)
+                .trimmingCharacters(in: .whitespaces)) { border = CGFloat(value) }
+        }
+        return isOverride ? border : nil
+    }
+
+    private static func parseSize(_ field: Substring) -> CGSize? {
+        // "225x417+1519+600"
+        let size = field.split(whereSeparator: { $0 == "+" || $0 == "-" }).first ?? ""
+        let parts = size.split(separator: "x")
+        guard parts.count == 2, let w = Double(parts[0]), let h = Double(parts[1]) else { return nil }
+        return CGSize(width: w, height: h)
+    }
+
+    private static func parseOrigin(_ field: Substring) -> CGPoint? {
+        // "+1519+600" (either sign)
+        var numbers: [Double] = []
+        var current = ""
+        for ch in field {
+            if ch == "+" || ch == "-" {
+                if !current.isEmpty, let value = Double(current) { numbers.append(value) }
+                current = ch == "-" ? "-" : ""
+            } else {
+                current.append(ch)
+            }
+        }
+        if let value = Double(current) { numbers.append(value) }
+        guard numbers.count == 2 else { return nil }
+        return CGPoint(x: numbers[0], y: numbers[1])
+    }
+
+    /// The server's pop-ups, asked of the X server; empty when it can't be asked.
+    static func popups(bundleIdentifier: String) -> [Popup] {
+        guard let display = display(forBundleIdentifier: bundleIdentifier),
+              let tree = run(["-display", display, "-root", "-tree"]) else { return [] }
+        return popupCandidates(fromTree: tree).compactMap { child in
+            guard let info = run(["-display", display, "-id", child.id]),
+                  let border = overrideRedirectBorder(fromWindowInfo: info) else { return nil }
+            return Popup(frame: child.frame, borderWidth: border)
+        }
+    }
+
+    private static func run(_ arguments: [String]) -> String? {
+        guard FileManager.default.isExecutableFile(atPath: xwininfo) else { return nil }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: xwininfo)
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// Asked again only when the server's set of windows changes.
+    private static let cache = Cache()
+
+    static func popupIDs(pid: pid_t, bundleIdentifier: String, xWindows: [XQuartzCGWindow]) -> Set<CGWindowID> {
+        let key = xWindows.map(\.id)
+        if let hit = cache.lookup(pid: pid, key: key) { return hit }
+        let ids = XQuartzWindowInventory.popupIDs(xWindows: xWindows, popups: popups(bundleIdentifier: bundleIdentifier))
+        cache.store(pid: pid, key: key, ids: ids)
+        return ids
+    }
+
+    private final class Cache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var entries: [pid_t: (key: [CGWindowID], ids: Set<CGWindowID>)] = [:]
+
+        func lookup(pid: pid_t, key: [CGWindowID]) -> Set<CGWindowID>? {
+            lock.lock(); defer { lock.unlock() }
+            guard let entry = entries[pid], entry.key == key else { return nil }
+            return entry.ids
+        }
+
+        func store(pid: pid_t, key: [CGWindowID], ids: Set<CGWindowID>) {
+            lock.lock(); defer { lock.unlock() }
+            entries[pid] = (key, ids)
         }
     }
 }
@@ -157,16 +323,22 @@ enum XQuartzWindowReader {
     /// callers keep their previous reading rather than dropping every card.
     static func read(_ server: Server) -> Reading? {
         guard let items = windowMenuItems(pid: server.pid),
-              let windows = windows(pid: server.pid, menuItems: items) else { return nil }
+              let windows = windows(pid: server.pid, bundleIdentifier: server.bundleIdentifier,
+                                    menuItems: items) else { return nil }
         let isHidden = NSRunningApplication(processIdentifier: server.pid)?.isHidden ?? false
         return Reading(pid: server.pid, bundleIdentifier: server.bundleIdentifier, isHidden: isHidden, windows: windows)
     }
 
-    static func windows(pid: pid_t, menuItems: [MenuItem]) -> [XQuartzWindow]? {
-        XQuartzWindowInventory.windows(
-            cgWindows: cgWindows(pid: pid),
-            menuTitles: XQuartzWindowInventory.windowTitles(fromWindowMenuItems: menuItems.map(\.title))
-        )
+    /// When the window server lists more X windows than the menu, the X server is asked which
+    /// of them are pop-ups, and those are left out.
+    static func windows(pid: pid_t, bundleIdentifier: String, menuItems: [MenuItem]) -> [XQuartzWindow]? {
+        let cgWindows = cgWindows(pid: pid)
+        let menuTitles = XQuartzWindowInventory.windowTitles(fromWindowMenuItems: menuItems.map(\.title))
+        let xWindows = XQuartzWindowInventory.xWindows(cgWindows)
+        let popupIDs = xWindows.count > menuTitles.count
+            ? XQuartzPopupFinder.popupIDs(pid: pid, bundleIdentifier: bundleIdentifier, xWindows: xWindows)
+            : []
+        return XQuartzWindowInventory.windows(cgWindows: cgWindows, menuTitles: menuTitles, popupIDs: popupIDs)
     }
 
     static func cgWindows(pid: pid_t) -> [XQuartzCGWindow] {
@@ -310,7 +482,8 @@ enum XQuartzWindowActions {
 
         // Bring the window forward (also restores it when minimized); minimize and close then act
         // on the front window.
-        guard let window = XQuartzWindowReader.windows(pid: record.pid, menuItems: items)?
+        guard let window = XQuartzWindowReader.windows(pid: record.pid, bundleIdentifier: record.bundleIdentifier ?? "",
+                                                       menuItems: items)?
                 .first(where: { $0.cgWindowID == cgWindowID }),
               let separator = items.lastIndex(where: { $0.title.isEmpty }) else { return false }
         let windowItems = Array(items[items.index(after: separator)...])
