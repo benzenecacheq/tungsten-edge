@@ -42,7 +42,7 @@ enum CrossOverLauncherIndex {
         _ = app.unhide()
         app.activate(options: [.activateIgnoringOtherApps])
         let pid = app.processIdentifier
-        AppRuntime.actionQueue.async {
+        reopenQueue.async {
             let event = NSAppleEventDescriptor(
                 eventClass: AEEventClass(kCoreEventClass),
                 eventID: AEEventID(kAEReopenApplication),
@@ -54,6 +54,9 @@ enum CrossOverLauncherIndex {
             _ = try? event.sendEvent(options: [.noReply, .neverInteract, .init(rawValue: 0x00020000)], timeout: 3)
         }
     }
+
+    /// Reopen waits on the program; never on the main thread.
+    private static let reopenQueue = DispatchQueue(label: "com.caye.macosdockcc.v2.crossover-reopen", qos: .userInitiated)
 
     static func launcherBundleID(processName: String?, executablePath: String?) -> String? {
         guard let key = programKey(processName: processName, executablePath: executablePath) else { return nil }
